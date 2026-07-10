@@ -2757,7 +2757,7 @@ textarea.form-control {
         <span id="sync-status-text">未連線</span>
         <span style="margin-left:auto;" id="last-sync-time">--</span>
       </div>
-      <div class="version-label">v2.0.7</div>
+      <div class="version-label">v2.0.8</div>
     </div>
   </aside>
 
@@ -2852,7 +2852,7 @@ textarea.form-control {
 
 /* ===== App Info ===== */
 var APP = {
-  VERSION: '2.0.7',
+  VERSION: '2.0.8',
   TITLE: 'VIP Booking System',
   SYSTEM_NAME: 'BookingHub'
 };
@@ -9343,7 +9343,7 @@ function renderProfit() { ProfitPage.render(); }
 <script>
 /**
  * fees.js — Fee Collection Page (Ctrl+3)
- * Booking System v2.0.7
+ * Booking System v2.0.8
  * Accountant fills volume → auto-calc discount/remaining → auto-determine fee status → fill charge amount
  * Silent save: updates DOM in-place without full page re-render
  */
@@ -9476,7 +9476,7 @@ var FeesPage = (function () {
     html += '</td>';
 
     /* Discount */
-    html += '<td class="num-cell cell-disc">' + (discountDays === 0 ? '<span style="color:var(--text-muted);">不足1</span>' : discountDays) + '</td>';
+    html += '<td class="num-cell cell-disc">' + (discountDays === 0 ? '<span style="color:var(--text-muted);">0</span>' : discountDays) + '</td>';
 
     /* Remaining */
     html += '<td class="num-cell cell-rem">' + _remainingHTML(remaining) + '</td>';
@@ -9632,7 +9632,7 @@ var FeesPage = (function () {
     /* Update discount cell */
     var discCell = tr.querySelector('.cell-disc');
     if (discCell) {
-      discCell.innerHTML = discountDays === 0 ? '<span style="color:var(--text-muted);">不足1</span>' : discountDays;
+      discCell.innerHTML = discountDays === 0 ? '<span style="color:var(--text-muted);">0</span>' : discountDays;
     }
 
     /* Update remaining cell */
@@ -11639,7 +11639,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783709825174";
+window.BUILD_VERSION = "1783713490450";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
