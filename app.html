@@ -5060,6 +5060,7 @@ function syncAgentListToFirebase(agentList, callback) {
       var key = agentList[i].id || Utils.encodeFirebaseKey(agentList[i].name || ('agent_' + i));
       data[key] = agentList[i];
     }
+    data._updatedAt = agentList._updatedAt || Date.now();
     _db.ref(FB_PATH.AGENT_LIST).set(data, function (err) {
       if (err) {
         console.error('[Firebase] AgentList set error:', err);
@@ -5087,6 +5088,7 @@ function syncEmployeeListToFirebase(employeeList, callback) {
       var key = employeeList[i].id || Utils.encodeFirebaseKey(employeeList[i].tgId || ('emp_' + i));
       data[key] = employeeList[i];
     }
+    data._updatedAt = employeeList._updatedAt || Date.now();
     _db.ref(FB_PATH.EMPLOYEE_LIST).set(data, function (err) {
       if (err) {
         console.error('[Firebase] EmployeeList set error:', err);
@@ -5365,7 +5367,7 @@ var Uploader = (function () {
       { path: FB_PATH.SETTINGS, data: State.get('settings'), syncFn: syncSettingsToFirebase }
     ];
 
-    var pending = arrayPaths.length + objectPaths.length + 2; /* +2 for agent & employee list */
+    var pending = arrayPaths.length + objectPaths.length; /* agent & employee handled by individual sync */
     var hasError = false;
 
     function _checkDone(err) {
@@ -5392,22 +5394,6 @@ var Uploader = (function () {
         _checkDone(null);
       }
     });
-
-    /* Agent list */
-    var agentList = State.get('agentList');
-    if (agentList && agentList.length > 0) {
-      syncAgentListToFirebase(agentList, _checkDone);
-    } else {
-      _checkDone(null);
-    }
-
-    /* Employee list */
-    var employeeList = State.get('employeeList');
-    if (employeeList && employeeList.length > 0) {
-      syncEmployeeListToFirebase(employeeList, _checkDone);
-    } else {
-      _checkDone(null);
-    }
   }
 
   function _uploadArrayPath(path, dataArray, type, done) {
@@ -5557,8 +5543,15 @@ function _watchHotelConfig() {
 function _watchAgentList() {
   _db.ref(FB_PATH.AGENT_LIST).on('value', function (snap) {
     try {
-      var remote = Utils.fbObjToArray(snap.val());
+      var raw = snap.val();
       var local = State.get('agentList');
+      var localTs = local && local._updatedAt ? local._updatedAt : 0;
+      var remoteTs = raw && raw._updatedAt ? raw._updatedAt : 0;
+      if (localTs > remoteTs) {
+        console.log('[Watchers] AgentList local is newer, skip remote');
+        return;
+      }
+      var remote = Utils.fbObjToArray(raw);
       var merged = Merger.mergeAgentList(local, remote);
       var changed = _hasChanged(local, merged);
       if (changed) {
@@ -5579,8 +5572,15 @@ function _watchAgentList() {
 function _watchEmployeeList() {
   _db.ref(FB_PATH.EMPLOYEE_LIST).on('value', function (snap) {
     try {
-      var remote = Utils.fbObjToArray(snap.val());
+      var raw = snap.val();
       var local = State.get('employeeList');
+      var localTs = local && local._updatedAt ? local._updatedAt : 0;
+      var remoteTs = raw && raw._updatedAt ? raw._updatedAt : 0;
+      if (localTs > remoteTs) {
+        console.log('[Watchers] EmployeeList local is newer, skip remote');
+        return;
+      }
+      var remote = Utils.fbObjToArray(raw);
       var merged = Merger.mergeEmployeeList(local, remote);
       var changed = _hasChanged(local, merged);
       if (changed) {
@@ -5750,8 +5750,16 @@ function syncDownloadAll(callback) {
   /* Agent list */
   _db.ref(FB_PATH.AGENT_LIST).once('value', function (snap) {
     try {
-      var remote = Utils.fbObjToArray(snap.val());
+      var raw = snap.val();
       var local = State.get('agentList');
+      var localTs = local && local._updatedAt ? local._updatedAt : 0;
+      var remoteTs = raw && raw._updatedAt ? raw._updatedAt : 0;
+      if (localTs > remoteTs) {
+        console.log('[Watchers] Download agentList: local newer, skip');
+        _done('agentList', local.length);
+        return;
+      }
+      var remote = Utils.fbObjToArray(raw);
       var merged = Merger.mergeAgentList(local, remote);
       State.set('agentList', merged);
       Store.saveAgentList(merged);
@@ -5765,8 +5773,16 @@ function syncDownloadAll(callback) {
   /* Employee list */
   _db.ref(FB_PATH.EMPLOYEE_LIST).once('value', function (snap) {
     try {
-      var remote = Utils.fbObjToArray(snap.val());
+      var raw = snap.val();
       var local = State.get('employeeList');
+      var localTs = local && local._updatedAt ? local._updatedAt : 0;
+      var remoteTs = raw && raw._updatedAt ? raw._updatedAt : 0;
+      if (localTs > remoteTs) {
+        console.log('[Watchers] Download employeeList: local newer, skip');
+        _done('employeeList', local.length);
+        return;
+      }
+      var remote = Utils.fbObjToArray(raw);
       var merged = Merger.mergeEmployeeList(local, remote);
       State.set('employeeList', merged);
       Store.saveEmployeeList(merged);
@@ -6875,6 +6891,7 @@ var Agents = {
           break;
         }
       }
+      list._updatedAt = Date.now();
       return list;
     });
 
@@ -7097,6 +7114,7 @@ var Employees = {
           break;
         }
       }
+      list._updatedAt = Date.now();
       return list;
     });
 
@@ -11071,7 +11089,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783704424113";
+window.BUILD_VERSION = "1783704939197";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
