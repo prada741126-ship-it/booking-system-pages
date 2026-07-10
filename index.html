@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <meta name="theme-color" content="#f0f2f5">
   <meta name="description" content="VIP 貴賓廳訂房管理系統 — 同步、高效、即時">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>BookingHub — VIP 訂房管理系統</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <!-- CSS will be injected here by build.js -->
@@ -10954,6 +10957,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
+window.BUILD_VERSION = "1783692669517";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
@@ -10963,6 +10967,25 @@ document.addEventListener("DOMContentLoaded", function() {
   var pwdInput = document.getElementById("login-password");
   if (pwdInput) pwdInput.focus();
 });
+/* Auto version check — bypass CDN cache */
+(function(){
+  if (sessionStorage.getItem("_vc")) return;
+  sessionStorage.setItem("_vc","1");
+  setTimeout(function(){
+    try {
+      fetch(window.location.href.split("?")[0] + "?_cb=" + Date.now(), {cache:"no-store"})
+        .then(function(r){return r.text();})
+        .then(function(html){
+          var m = html.match(/BUILD_VERSION\s*=\s*["']([0-9]+)["']/);
+          if (m && m[1] !== String(window.BUILD_VERSION)) {
+            console.log("[Cache] New version detected: " + m[1] + " vs current " + window.BUILD_VERSION + ". Reloading...");
+            window.location.reload();
+          }
+        })
+        .catch(function(){});
+    } catch(e) {}
+  }, 2000);
+})();
 </script>
 
 
