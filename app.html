@@ -7775,6 +7775,21 @@ var Stats = {
     return sum;
   },
 
+  /**
+   * Total threshold weighted by nights (sum of booking.threshold × booking.nights)
+   * 1 room = 1 night; a 2-night booking contributes threshold × 2
+   */
+  totalThresholdNights: function (bookings) {
+    if (!bookings) return 0;
+    var sum = 0;
+    for (var i = 0; i < bookings.length; i++) {
+      var th = Number(bookings[i].threshold) || 0;
+      var n = Number(bookings[i].nights) || 0;
+      sum += th * n;
+    }
+    return sum;
+  },
+
   /* ===== Financial Stats (v8 new) ===== */
 
   /**
@@ -8197,10 +8212,11 @@ var Stats = {
   summary: function (bookings) {
     if (!bookings) bookings = [];
     return {
-      totalBookings:      bookings.length,
-      totalNights:        Stats.totalNights(bookings),
-      totalThreshold:     Stats.totalThreshold(bookings),
-      totalProfit:        Stats.totalProfit(bookings),
+      totalBookings:        bookings.length,
+      totalNights:          Stats.totalNights(bookings),
+      totalThreshold:       Stats.totalThreshold(bookings),
+      totalThresholdNights: Stats.totalThresholdNights(bookings),
+      totalProfit:          Stats.totalProfit(bookings),
       totalChargeGuest:   Stats.totalChargeGuest(bookings),
       totalChargeCompany: Stats.totalChargeCompany(bookings),
       byStatus:           Stats.countByStatus(bookings),
@@ -8717,7 +8733,7 @@ var OverviewPage = (function () {
     /* KPI stats: still filtered by check-in month */
     var monthBookings = Filters.filterBookings(allBookings, { month: month });
     var summ = Stats.summary(monthBookings);
-    var total = summ.totalBookings;
+    var total = summ.totalBookings; /* used for status distribution percentages */
 
     /* Recent bookings: filtered by check-in month (original logic), but show creation date */
     var recent = Filters.sortBookings(monthBookings, '_createdAt', false).slice(0, 8);
@@ -8742,10 +8758,10 @@ var OverviewPage = (function () {
     /* KPI Cards — 2 large cards, fixed 50% each */
     html += '<div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr);">';
 
-    html += _kpiCard('kpi-blue', '本月訂房數', total, '間', '本月入住訂房總數',
+    html += _kpiCard('kpi-blue', '本月房晚數', summ.totalNights, '晚', '本月入住總房晚數（1間房=1晚）',
       '<svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>', true);
 
-    html += _kpiCard('kpi-gold', '總洗碼門檻', Utils.formatNumber(summ.totalThreshold), '', '本月入住門檻總和',
+    html += _kpiCard('kpi-gold', '總洗碼門檻', Utils.formatNumber(summ.totalThresholdNights), '', '本月入住門檻×晚數總和',
       '<svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>', true);
 
     html += '</div>';
@@ -10990,7 +11006,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783696482569";
+window.BUILD_VERSION = "1783697945444";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
