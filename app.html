@@ -295,7 +295,39 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-base);
+  background: linear-gradient(135deg, #dbeafe 0%, #f0f2f5 35%, #ede9fe 70%, #fce7f3 100%);
+  overflow: hidden;
+}
+
+#login-overlay::before {
+  content: '';
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, transparent 70%);
+  top: -200px;
+  right: -100px;
+  animation: loginGlow 8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+#login-overlay::after {
+  content: '';
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.06) 0%, transparent 70%);
+  bottom: -150px;
+  left: -100px;
+  animation: loginGlow 10s ease-in-out infinite alternate-reverse;
+  pointer-events: none;
+}
+
+@keyframes loginGlow {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(30px, -20px) scale(1.1); }
 }
 
 #login-overlay.hidden {
@@ -303,15 +335,19 @@ button {
 }
 
 .login-card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-2xl);
   padding: var(--sp-12);
-  width: 360px;
+  width: 380px;
   max-width: 90vw;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
   text-align: center;
   animation: loginFadeIn 0.5s var(--tr-smooth);
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes loginFadeIn {
@@ -320,15 +356,21 @@ button {
 }
 
 .login-card .login-logo {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto var(--sp-4);
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--sp-5);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-xl);
   background: var(--grad-primary);
-  box-shadow: var(--shadow-primary);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3), 0 0 0 8px rgba(37, 99, 235, 0.1);
+  animation: logoPulse 3s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3), 0 0 0 8px rgba(37, 99, 235, 0.1); }
+  50% { box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4), 0 0 0 14px rgba(37, 99, 235, 0.05); }
 }
 
 .login-card .login-logo svg {
@@ -338,10 +380,15 @@ button {
 }
 
 .login-card h1 {
-  font-size: var(--fs-xl);
+  font-size: var(--fs-2xl);
   font-weight: var(--fw-extrabold);
   margin-bottom: var(--sp-1);
   color: var(--text-primary);
+  letter-spacing: -0.5px;
+  background: var(--grad-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-card .login-subtitle {
@@ -402,12 +449,13 @@ button {
 }
 
 .login-card .login-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
 }
 
 .login-card .login-btn:active {
   transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 .login-card .login-hint {
@@ -420,7 +468,7 @@ button {
 #sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
-  background: var(--bg-surface);
+  background: var(--grad-surface);
   border-right: 1px solid var(--border-default);
   display: flex;
   flex-direction: column;
@@ -430,6 +478,7 @@ button {
   left: 0;
   z-index: var(--z-sidebar);
   transition: width var(--tr-normal), transform var(--tr-normal);
+  box-shadow: 1px 0 8px rgba(0, 0, 0, 0.03);
 }
 
 #sidebar .sidebar-header {
@@ -439,6 +488,7 @@ button {
   padding: 0 var(--sp-4);
   border-bottom: 1px solid var(--border-default);
   gap: var(--sp-3);
+  background: rgba(37, 99, 235, 0.02);
 }
 
 #sidebar .sidebar-header .sidebar-logo {
@@ -500,22 +550,25 @@ button {
 #sidebar .nav-item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  transform: translateX(2px);
 }
 
 #sidebar .nav-item.active {
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(37, 99, 235, 0.1);
   color: var(--color-primary);
+  font-weight: var(--fw-semibold);
 }
 
 #sidebar .nav-item.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 20%;
-  bottom: 20%;
+  top: 15%;
+  bottom: 15%;
   width: 3px;
   border-radius: var(--radius-full);
-  background: var(--color-primary);
+  background: var(--grad-primary);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
 }
 
 #sidebar .nav-item .nav-icon {
@@ -706,6 +759,37 @@ button {
   fill: currentColor;
 }
 
+/* ===== Offline Indicator (topbar) ===== */
+#offline-indicator {
+  display: none;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-full);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-danger);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  animation: offlineBlink 2s ease-in-out infinite;
+}
+
+#offline-indicator.visible {
+  display: flex;
+}
+
+#offline-indicator .offline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+}
+
+@keyframes offlineBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* ===== Page Container ===== */
 .page-content {
   display: none;
@@ -713,15 +797,15 @@ button {
   max-width: var(--content-max-w);
   width: 100%;
   margin: 0 auto;
-  animation: pageFadeIn 0.3s var(--tr-smooth);
 }
 
 .page-content.active {
   display: block;
+  animation: pageSlideIn 0.35s var(--tr-smooth);
 }
 
-@keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -839,6 +923,67 @@ button {
   opacity: 1;
 }
 
+/* ===== More Nav Popup (Mobile) ===== */
+#more-nav-popup {
+  display: none;
+  position: fixed;
+  bottom: var(--bottom-nav-h);
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: var(--z-topbar);
+  animation: moreNavFadeIn 0.2s var(--tr-fast);
+}
+
+#more-nav-popup.visible {
+  display: block;
+}
+
+@keyframes moreNavFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#more-nav-popup .more-nav-content {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-default);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: var(--sp-4);
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: center;
+  animation: moreNavSlideUp 0.25s var(--tr-smooth);
+}
+
+@keyframes moreNavSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+#more-nav-popup .more-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  transition: all var(--tr-fast);
+}
+
+#more-nav-popup .more-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--color-primary);
+}
+
+#more-nav-popup .more-nav-item svg {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+}
+
 
 /* ===== css/components.css ===== */
 /* ============================================================
@@ -868,6 +1013,27 @@ button {
   box-shadow: var(--shadow-sm);
 }
 
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  opacity: 0.04;
+  transform: translate(30px, -30px);
+  transition: opacity var(--tr-normal);
+  pointer-events: none;
+}
+
+.kpi-card.kpi-blue::after { background: var(--color-primary); }
+.kpi-card.kpi-green::after { background: var(--color-success); }
+.kpi-card.kpi-gold::after { background: var(--color-gold-soft); }
+.kpi-card.kpi-amber::after { background: var(--color-warning); }
+.kpi-card.kpi-red::after { background: var(--color-danger); }
+.kpi-card.kpi-slate::after { background: #64748b; }
+
 .kpi-card::before {
   content: '';
   position: absolute;
@@ -888,8 +1054,12 @@ button {
 
 .kpi-card:hover {
   border-color: var(--border-hover);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-lg);
+}
+
+.kpi-card:hover::after {
+  opacity: 0.08;
 }
 
 .kpi-card .kpi-header {
@@ -1127,9 +1297,13 @@ button {
   transition: all var(--tr-fast);
 }
 
+.form-control:hover:not(:disabled) {
+  border-color: var(--border-hover);
+}
+
 .form-control:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   outline: none;
 }
 
@@ -1193,7 +1367,7 @@ textarea.form-control {
 }
 
 .data-table thead th {
-  background: var(--bg-base);
+  background: linear-gradient(180deg, var(--bg-base) 0%, #e2e8f0 100%);
   padding: var(--sp-3) var(--sp-4);
   text-align: left;
   font-weight: var(--fw-semibold);
@@ -1201,7 +1375,7 @@ textarea.form-control {
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 2px solid var(--border-hover);
   white-space: nowrap;
   position: sticky;
   top: 0;
@@ -1220,11 +1394,12 @@ textarea.form-control {
 }
 
 .data-table tbody tr:nth-child(even) {
-  background: rgba(248, 250, 252, 0.5);
+  background: rgba(241, 245, 249, 0.6);
 }
 
 .data-table tbody tr:hover {
-  background: rgba(37, 99, 235, 0.04);
+  background: rgba(37, 99, 235, 0.06);
+  box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
 .data-table tbody tr:last-child td {
@@ -1251,10 +1426,10 @@ textarea.form-control {
 /* Summary row in table */
 .data-table tfoot td {
   padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-base);
+  background: linear-gradient(180deg, var(--bg-base) 0%, #e2e8f0 100%);
   font-weight: var(--fw-bold);
   color: var(--text-primary);
-  border-top: 2px solid var(--border-default);
+  border-top: 2px solid var(--color-primary);
 }
 
 /* ===== Status Badges ===== */
@@ -1736,10 +1911,30 @@ textarea.form-control {
 }
 
 .empty-state .empty-icon {
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   margin-bottom: var(--sp-4);
-  opacity: 0.3;
+  opacity: 0.25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: emptyFloat 3s ease-in-out infinite;
+}
+
+.empty-state .empty-icon::before {
+  content: '';
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.06) 0%, transparent 70%);
+  z-index: -1;
+}
+
+@keyframes emptyFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .empty-state .empty-icon svg {
@@ -1802,6 +1997,51 @@ textarea.form-control {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ===== Global Loading Overlay ===== */
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+#loading-overlay.visible {
+  display: flex;
+  animation: loadingFadeIn 0.2s var(--tr-fast);
+}
+
+@keyframes loadingFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#loading-overlay .loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+#loading-overlay .loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(37, 99, 235, 0.15);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+#loading-overlay .loading-text {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
 }
 
 /* ===== Divider ===== */
@@ -2757,7 +2997,7 @@ textarea.form-control {
         <span id="sync-status-text">未連線</span>
         <span style="margin-left:auto;" id="last-sync-time">--</span>
       </div>
-      <div class="version-label">v2.0.9</div>
+      <div class="version-label">v2.1.0</div>
     </div>
   </aside>
 
@@ -2777,6 +3017,10 @@ textarea.form-control {
       </div>
       <div class="topbar-spacer"></div>
       <div class="topbar-actions">
+        <div id="offline-indicator">
+          <span class="offline-dot"></span>
+          <span>離線模式</span>
+        </div>
         <div class="month-nav">
           <button onclick="prevMonth()" title="上月">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
@@ -2830,8 +3074,34 @@ textarea.form-control {
       <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       <span class="bottom-nav-label">員工</span>
     </div>
+    <div class="bottom-nav-item" onclick="toggleMoreNav()">
+      <svg viewBox="0 0 24 24"><path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+      <span class="bottom-nav-label">更多</span>
+    </div>
   </div>
 </nav>
+
+<!-- ===== More Nav Popup (Mobile) ===== -->
+<div id="more-nav-popup" onclick="closeMoreNav(event)">
+  <div class="more-nav-content">
+    <div class="more-nav-item" onclick="navigateTo('agent-performance'); closeMoreNav();">
+      <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+      <span>代理業績</span>
+    </div>
+    <div class="more-nav-item" onclick="navigateTo('hotel-config'); closeMoreNav();">
+      <svg viewBox="0 0 24 24"><path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-1.1-.9-2-2-2z"/></svg>
+      <span>酒店設定</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Loading Overlay ===== -->
+<div id="loading-overlay">
+  <div class="loading-content">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">載入中...</div>
+  </div>
+</div>
 
 <!-- ===== Toast Container ===== -->
 <div id="toast-container"></div>
@@ -2852,7 +3122,7 @@ textarea.form-control {
 
 /* ===== App Info ===== */
 var APP = {
-  VERSION: '2.0.9',
+  VERSION: '2.1.0',
   TITLE: 'VIP Booking System',
   SYSTEM_NAME: 'BookingHub'
 };
@@ -4528,6 +4798,24 @@ var App = (function () {
       console.error('[App] Sync error:', data);
     });
 
+    /* Loading overlay control */
+    Events.on(EVENTS.UI_LOADING, function (data) {
+      if (data && data.show) {
+        App.showLoading(data.text || '載入中...');
+      } else {
+        App.hideLoading();
+      }
+    });
+
+    /* Show loading during sync upload */
+    Events.on(EVENTS.SYNC_UPLOAD_START, function () {
+      App.showLoading('同步中...');
+    });
+
+    Events.on(EVENTS.SYNC_UPLOAD_DONE, function () {
+      App.hideLoading();
+    });
+
     /* Month changed -> re-render */
     Events.on(EVENTS.MONTH_CHANGED, function () {
       Events.emit(EVENTS.UI_RENDER, {});
@@ -4566,6 +4854,15 @@ var App = (function () {
     if (text) {
       text.textContent = connected ? '已連線' : '未連線';
     }
+    /* Toggle offline indicator in topbar */
+    var offlineEl = document.getElementById('offline-indicator');
+    if (offlineEl) {
+      if (connected) {
+        offlineEl.classList.remove('visible');
+      } else {
+        offlineEl.classList.add('visible');
+      }
+    }
   }
 
   function updateLastSyncTime() {
@@ -4593,12 +4890,27 @@ var App = (function () {
     }
   }
 
+  /* Loading overlay control */
+  function showLoading(text) {
+    var overlay = document.getElementById('loading-overlay');
+    var textEl = document.getElementById('loading-text');
+    if (textEl) textEl.textContent = text || '載入中...';
+    if (overlay) overlay.classList.add('visible');
+  }
+
+  function hideLoading() {
+    var overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.classList.remove('visible');
+  }
+
   return {
     init: init,
     afterFirebaseReady: afterFirebaseReady,
     loadFromStore: loadFromStore,
     updateSyncIndicator: updateSyncIndicator,
-    updateLastSyncTime: updateLastSyncTime
+    updateLastSyncTime: updateLastSyncTime,
+    showLoading: showLoading,
+    hideLoading: hideLoading
   };
 })();
 
@@ -8978,13 +9290,13 @@ var OverviewPage = (function () {
     html += '    費用分佈';
     html += '  </div>';
     var fs = summ.feeStats;
-    html += _statRow('免費房', fs.free.count + ' 間', 'fee-badge free');
-    html += _statRow('收費房', fs.paid.count + ' 間', 'fee-badge paid');
+    html += _feeDonut(fs.free.count, fs.paid.count);
     if (fs.paid.count > 0) {
-      html += '<div style="border-top:1px solid var(--border-default);margin-top:var(--sp-2);padding-top:var(--sp-2);">';
+      html += '<div style="border-top:1px solid var(--border-default);margin-top:var(--sp-3);padding-top:var(--sp-3);">';
       html += _statRow('向客人收', Utils.formatCurrency(fs.paid.chargeGuest, CURRENCY_DEFAULT), '');
       html += _statRow('交公司', Utils.formatCurrency(fs.paid.chargeCompany, CURRENCY_DEFAULT), '');
-      html += _statRow('利潤', Utils.formatCurrency(fs.paid.profit, CURRENCY_DEFAULT), '');
+      var profitColor = fs.paid.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+      html += '<div class="stat-row"><span class="stat-label">利潤</span><span class="stat-value" style="color:' + profitColor + ';">' + Utils.formatCurrency(fs.paid.profit, CURRENCY_DEFAULT) + '</span></div>';
       html += '</div>';
     }
     html += '</div>';
@@ -9045,12 +9357,17 @@ var OverviewPage = (function () {
 
   function _statusRow(label, count, total, color) {
     var pct = total > 0 ? (count / total * 100) : 0;
-    var html = '<div class="stat-row">';
-    html += '  <span class="stat-label" style="display:flex;align-items:center;gap:6px;">';
-    html += '    <span style="width:8px;height:8px;border-radius:50%;background:' + color + ';"></span>';
-    html += '    ' + Utils.escapeHtml(label);
-    html += '  </span>';
-    html += '  <span class="stat-value">' + count + ' <span style="color:var(--text-muted);font-weight:400;font-size:var(--fs-xs);">(' + pct.toFixed(0) + '%)</span></span>';
+    var html = '<div class="stat-row" style="flex-direction:column;align-items:stretch;gap:4px;">';
+    html += '  <div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '    <span class="stat-label" style="display:flex;align-items:center;gap:6px;">';
+    html += '      <span style="width:8px;height:8px;border-radius:50%;background:' + color + ';"></span>';
+    html += '      ' + Utils.escapeHtml(label);
+    html += '    </span>';
+    html += '    <span class="stat-value">' + count + ' <span style="color:var(--text-muted);font-weight:400;font-size:var(--fs-xs);">(' + pct.toFixed(0) + '%)</span></span>';
+    html += '  </div>';
+    html += '  <div style="height:6px;background:var(--bg-base);border-radius:var(--radius-full);overflow:hidden;">';
+    html += '    <div style="height:100%;width:' + pct.toFixed(1) + '%;background:' + color + ';border-radius:var(--radius-full);transition:width 0.6s var(--tr-smooth);"></div>';
+    html += '  </div>';
     html += '</div>';
     return html;
   }
@@ -9058,6 +9375,41 @@ var OverviewPage = (function () {
   function _statRow(label, value, badgeClass) {
     var valHtml = badgeClass ? '<span class="' + badgeClass + '">' + value + '</span>' : value;
     return '<div class="stat-row"><span class="stat-label">' + Utils.escapeHtml(label) + '</span><span class="stat-value">' + valHtml + '</span></div>';
+  }
+
+  /* Donut chart for fee distribution (CSS conic-gradient) */
+  function _feeDonut(freeCount, paidCount) {
+    var total = freeCount + paidCount;
+    if (total === 0) {
+      return '<div style="text-align:center;padding:var(--sp-6);color:var(--text-muted);font-size:var(--fs-sm);">暫無數據</div>';
+    }
+    var freePct = total > 0 ? (freeCount / total * 100) : 0;
+    var paidPct = total > 0 ? (paidCount / total * 100) : 0;
+    var freeColor = '#16a34a';
+    var paidColor = '#f59e0b';
+
+    var html = '<div style="display:flex;align-items:center;gap:var(--sp-4);">';
+    /* Donut chart using conic-gradient */
+    html += '<div style="width:110px;height:110px;border-radius:50%;';
+    html += 'background:conic-gradient(' + freeColor + ' 0% ' + freePct.toFixed(1) + '%, ' + paidColor + ' ' + freePct.toFixed(1) + '% 100%);';
+    html += 'display:flex;align-items:center;justify-content:center;flex-shrink:0;';
+    html += 'box-shadow:0 2px 8px rgba(0,0,0,0.08);">';
+    html += '<div style="width:72px;height:72px;border-radius:50%;background:var(--bg-elevated);display:flex;flex-direction:column;align-items:center;justify-content:center;">';
+    html += '<span style="font-size:var(--fs-xl);font-weight:var(--fw-extrabold);color:var(--text-primary);">' + total + '</span>';
+    html += '<span style="font-size:var(--fs-xs);color:var(--text-muted);">總房數</span>';
+    html += '</div></div>';
+    /* Legend */
+    html += '<div style="flex:1;">';
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:var(--sp-2);">';
+    html += '<span style="width:10px;height:10px;border-radius:2px;background:' + freeColor + ';flex-shrink:0;"></span>';
+    html += '<span style="font-size:var(--fs-sm);color:var(--text-secondary);">免費房 ' + freeCount + ' (' + freePct.toFixed(0) + '%)</span>';
+    html += '</div>';
+    html += '<div style="display:flex;align-items:center;gap:6px;">';
+    html += '<span style="width:10px;height:10px;border-radius:2px;background:' + paidColor + ';flex-shrink:0;"></span>';
+    html += '<span style="font-size:var(--fs-sm);color:var(--text-secondary);">收費房 ' + paidCount + ' (' + paidPct.toFixed(0) + '%)</span>';
+    html += '</div>';
+    html += '</div></div>';
+    return html;
   }
 
   function _recentRow(b) {
@@ -11146,6 +11498,21 @@ function closeSidebar() {
 }
 
 /* ============================================================
+ * Mobile More Nav — toggle popup for additional pages
+ * ============================================================ */
+
+function toggleMoreNav() {
+  var popup = document.getElementById('more-nav-popup');
+  if (popup) popup.classList.toggle('visible');
+}
+
+function closeMoreNav(event) {
+  if (event && event.target && event.target.id !== 'more-nav-popup') return;
+  var popup = document.getElementById('more-nav-popup');
+  if (popup) popup.classList.remove('visible');
+}
+
+/* ============================================================
  * Booking Modal — Create / Edit / View / Delete
  * v8 fields: guestName, agent, employee, casino, hotel, roomType,
  *            checkIn, checkOut, smoking, feeStatus, currency,
@@ -11706,7 +12073,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783721850291";
+window.BUILD_VERSION = "1783723187535";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
