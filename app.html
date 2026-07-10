@@ -8844,7 +8844,7 @@ var OverviewPage = (function () {
     html += _kpiCard('kpi-blue', '本月房晚數', summ.totalNights, '晚', '本月入住總房晚數（1間房=1晚）',
       '<svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>', true);
 
-    html += _kpiCard('kpi-gold', '總洗碼門檻', Utils.formatNumber(summ.totalThresholdNights), '', '本月入住門檻×晚數總和',
+    html += _kpiCard('kpi-gold', '總洗碼門檻', Utils.formatNumber(Math.round(summ.totalThresholdNights / 10000)), '萬', '本月入住門檻×晚數總和',
       '<svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>', true);
 
     html += '</div>';
@@ -10286,8 +10286,8 @@ var HotelConfigPage = (function () {
     var html = '<div class="hc-room-cell">';
     html += '  <div class="hc-room-label">' + Utils.escapeHtml(roomType.short) + '</div>';
     html += '  <div class="hc-room-threshold" onclick="HotelConfigPage.editThreshold(\'' + Utils.escapeHtml(casinoName) + '\',\'' + Utils.escapeHtml(hotelName) + '\',\'' + roomType.value + '\')" title="點擊編輯門檻">';
-    html += '    <span style="font-size:var(--fs-xs);color:var(--text-muted);">門檻</span>';
-    html += '    <span style="font-weight:600;color:var(--color-primary);">' + Utils.formatNumber(config.threshold || 0) + '</span>';
+    html += '    <span style="font-size:var(--fs-xs);color:var(--text-muted);">門檻(萬)</span>';
+    html += '    <span style="font-weight:600;color:var(--color-primary);">' + Utils.formatNumber(Math.round((config.threshold || 0) / 10000)) + '</span>';
     html += '  </div>';
     html += '</div>';
     return html;
@@ -10406,8 +10406,9 @@ var HotelConfigPage = (function () {
     }
 
     var body =
-      '<div class="form-group"><label>洗碼門檻</label>' +
-      '<input type="number" id="hc-threshold" value="' + (current.threshold || 0) + '" placeholder="0"></div>' +
+      '<div class="form-group"><label>洗碼門檻（萬）</label>' +
+      '<input type="number" id="hc-threshold" value="' + Math.round((current.threshold || 0) / 10000) + '" placeholder="0"></div>' +
+      '<p style="font-size:var(--fs-xs);color:var(--text-muted);">以萬為單位輸入，例如 30 = 30萬</p>' +
       '<div class="form-group"><label>預設房價</label>' +
       '<input type="number" id="hc-default-price" value="' + (current.defaultPrice || 0) + '" placeholder="0"></div>' +
       '<p style="font-size:var(--fs-xs);color:var(--text-muted);">' + Utils.escapeHtml(casinoName + ' / ' + hotelName + ' / ' + rtLabel) + '</p>';
@@ -10420,7 +10421,8 @@ var HotelConfigPage = (function () {
   }
 
   function confirmEditThreshold(casinoName, hotelName, roomType) {
-    var threshold = Number(document.getElementById('hc-threshold').value) || 0;
+    var thresholdWan = Number(document.getElementById('hc-threshold').value) || 0;
+    var threshold = thresholdWan * 10000;
     var defaultPrice = Number(document.getElementById('hc-default-price').value) || 0;
 
     Hotels.updateRoomConfig(casinoName, hotelName, roomType, {
@@ -10596,7 +10598,7 @@ function openBookingModal(presetDate) {
   body += '<div class="form-row-3" id="bk-fee-row" style="display:none;">';
   body += '  <div class="form-group"><label>' + Utils.escapeHtml(TERMS.chargeGuest) + '</label><input type="number" class="form-control" id="bk-chargeGuest" value="0" min="0"></div>';
   body += '  <div class="form-group"><label>' + Utils.escapeHtml(TERMS.chargeCompany) + '</label><input type="number" class="form-control" id="bk-chargeCompany" value="0" min="0"></div>';
-  body += '  <div class="form-group"><label>' + Utils.escapeHtml(TERMS.threshold) + '</label><input type="number" class="form-control" id="bk-threshold" value="0" readonly style="opacity:0.6;"></div>';
+  body += '  <div class="form-group"><label>' + Utils.escapeHtml(TERMS.threshold) + '（萬）</label><input type="number" class="form-control" id="bk-threshold" value="0" readonly style="opacity:0.6;"></div>';
   body += '</div>';
 
   body += '<div class="form-row">';
@@ -10659,7 +10661,7 @@ function onHotelChange() {
   for (var i = 0; i < ROOM_TYPES.length; i++) {
     var threshold = Hotels.getThreshold(casino, hotel, ROOM_TYPES[i].value);
     roomSelect.innerHTML += '<option value="' + ROOM_TYPES[i].value + '" data-threshold="' + threshold + '">' +
-      Utils.escapeHtml(ROOM_TYPES[i].label) + ' (\u9580\u6abbi ' + Utils.formatNumber(threshold) + ')</option>';
+      Utils.escapeHtml(ROOM_TYPES[i].label) + ' (\u9580\u6abbi ' + Utils.formatNumber(Math.round(threshold / 10000)) + '\u842c)</option>';
   }
   roomSelect.disabled = false;
 }
@@ -10672,7 +10674,7 @@ function onRoomTypeChange() {
 
   if (casino && hotel && roomType) {
     var threshold = Hotels.getThreshold(casino, hotel, roomType);
-    if (thresholdInput) thresholdInput.value = threshold || 0;
+    if (thresholdInput) thresholdInput.value = Math.round((threshold || 0) / 10000);
   }
 }
 
@@ -10719,7 +10721,7 @@ function saveBookingForm() {
   /* Get threshold from hidden field */
   var thresholdInput = document.getElementById('bk-threshold');
   if (thresholdInput) {
-    data.threshold = Number(thresholdInput.value) || 0;
+    data.threshold = (Number(thresholdInput.value) || 0) * 10000;
   }
 
   /* Validation */
@@ -10813,7 +10815,7 @@ function viewBookingDetail(fbKey) {
   body += _detailField(TERMS.chargeGuest, b.feeStatus === 'paid' ? Utils.formatCurrency(b.chargeGuest, b.currency) : '--');
   body += _detailField(TERMS.chargeCompany, b.feeStatus === 'paid' ? Utils.formatCurrency(b.chargeCompany, b.currency) : '--');
   body += _detailField(TERMS.profit, b.feeStatus === 'paid' ? Utils.formatCurrency(b.profit, b.currency) : '--');
-  body += _detailField(TERMS.threshold, Utils.formatNumber(b.threshold));
+  body += _detailField(TERMS.threshold, Utils.formatNumber(Math.round((b.threshold || 0) / 10000)) + ' 萬');
   body += _detailField(TERMS.transfer, _transferLabel(b.transfer));
   body += _detailField(TERMS.pickupName, b.pickupName || '--');
   body += _detailField(TERMS.employee, b.employee || '--');
@@ -11089,7 +11091,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783704939197";
+window.BUILD_VERSION = "1783705198456";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
