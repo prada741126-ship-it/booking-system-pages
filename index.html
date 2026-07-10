@@ -10957,7 +10957,7 @@ function clearAllData() {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783692669517";
+window.BUILD_VERSION = "1783693648417";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
@@ -10973,7 +10973,7 @@ document.addEventListener("DOMContentLoaded", function() {
   sessionStorage.setItem("_vc","1");
   setTimeout(function(){
     try {
-      fetch(window.location.href.split("?")[0] + "?_cb=" + Date.now(), {cache:"no-store"})
+      fetch(window.location.href.split("?")[0].replace(/#.*$/,"") + "index.html", {cache:"no-store"})
         .then(function(r){return r.text();})
         .then(function(html){
           var m = html.match(/BUILD_VERSION\s*=\s*["']([0-9]+)["']/);
@@ -10982,7 +10982,7 @@ document.addEventListener("DOMContentLoaded", function() {
             window.location.reload();
           }
         })
-        .catch(function(){});
+        .catch(function(e){console.log("[Cache] version check failed:",e.message);});
     } catch(e) {}
   }, 2000);
 })();
