@@ -2997,7 +2997,7 @@ textarea.form-control {
         <span id="sync-status-text">未連線</span>
         <span style="margin-left:auto;" id="last-sync-time">--</span>
       </div>
-      <div class="version-label">v2.1.0</div>
+      <div class="version-label">v2.1.6</div>
     </div>
   </aside>
 
@@ -3122,7 +3122,7 @@ textarea.form-control {
 
 /* ===== App Info ===== */
 var APP = {
-  VERSION: '2.1.0',
+  VERSION: '2.1.6',
   TITLE: 'VIP Booking System',
   SYSTEM_NAME: 'BookingHub'
 };
@@ -3659,6 +3659,42 @@ var State = (function () {
     return _state.closedMonths.indexOf(monthStr) !== -1;
   }
 
+  /* ===== 月結封存 ===== */
+
+  function sealMonth(monthStr) {
+    if (!monthStr) return false;
+    if (_state.closedMonths.indexOf(monthStr) !== -1) return false;
+    _state.closedMonths.push(monthStr);
+    _state.closedMonths.sort();
+    Store.saveClosedMonths(_state.closedMonths);
+    Events.emit(EVENTS.MONTH_CLOSED, _state.closedMonths);
+    console.log('[State] Month sealed:', monthStr);
+    /* Sync to Firebase */
+    if (typeof syncClosedMonthsToFirebase === 'function') {
+      syncClosedMonthsToFirebase(_state.closedMonths, function (err) {
+        if (err) console.error('[State] syncClosedMonthsToFirebase error:', err);
+      });
+    }
+    return true;
+  }
+
+  function unsealMonth(monthStr) {
+    if (!monthStr) return false;
+    var idx = _state.closedMonths.indexOf(monthStr);
+    if (idx === -1) return false;
+    _state.closedMonths.splice(idx, 1);
+    Store.saveClosedMonths(_state.closedMonths);
+    Events.emit(EVENTS.MONTH_CLOSED, _state.closedMonths);
+    console.log('[State] Month unsealed:', monthStr);
+    /* Sync to Firebase */
+    if (typeof syncClosedMonthsToFirebase === 'function') {
+      syncClosedMonthsToFirebase(_state.closedMonths, function (err) {
+        if (err) console.error('[State] syncClosedMonthsToFirebase error:', err);
+      });
+    }
+    return true;
+  }
+
   function getSettings() {
     return _state.settings || {};
   }
@@ -3699,6 +3735,8 @@ var State = (function () {
     getHotelConfig: getHotelConfig,
     getWorkingMonth: getWorkingMonth,
     isMonthClosed: isMonthClosed,
+    sealMonth: sealMonth,
+    unsealMonth: unsealMonth,
     getSettings: getSettings,
     getRoomFeeRate: getRoomFeeRate,
     setRoomFeeRate: setRoomFeeRate,
@@ -4853,6 +4891,11 @@ var App = (function () {
       Events.emit(EVENTS.UI_RENDER, {});
     });
 
+    /* Month closed/opened -> re-render current page to update seal labels */
+    Events.on(EVENTS.MONTH_CLOSED, function () {
+      Events.emit(EVENTS.UI_RENDER, {});
+    });
+
     /* Update version label */
     var verEl = document.querySelector('.version-label');
     if (verEl) verEl.textContent = 'v' + APP.VERSION;
@@ -4919,6 +4962,35 @@ var App = (function () {
     }
     if (typeof syncDownloadAll === 'function') {
       syncDownloadAll();
+    }
+    /* Auto-seal past months after sync download completes */
+    setTimeout(function () {
+      _autoSealPastMonths();
+    }, 3000);
+  }
+
+  /* ===== Auto-seal: seal any past month that is not yet sealed ===== */
+  /* Rule: if current month is not the same as last month, and last month */
+  /* is not in closedMonths, auto-seal it. Actual trigger: next app open. */
+  function _autoSealPastMonths() {
+    try {
+      var currentMonth = Utils.currentMonth();
+      var closedMonths = State.get('closedMonths') || [];
+
+      /* Find the previous month string (YYYY-MM) */
+      var now = new Date();
+      var prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var prevMonth = prevDate.getFullYear() + '-' +
+        String(prevDate.getMonth() + 1).padStart(2, '0');
+
+      /* Only seal if we are in a new month and the previous month is not sealed */
+      if (prevMonth !== currentMonth && closedMonths.indexOf(prevMonth) === -1) {
+        console.log('[App] Auto-sealing previous month:', prevMonth);
+        State.sealMonth(prevMonth);
+        Toast.info('已自動封存 ' + prevMonth + ' 月結資料');
+      }
+    } catch (e) {
+      console.error('[App] Auto-seal error:', e);
     }
   }
 
@@ -9357,8 +9429,9 @@ var OverviewPage = (function () {
     var html = '';
 
     /* Page header */
+    var sealLabel = _buildSealLabel(month);
     html += '<div class="page-header">';
-    html += '  <h3>總覽 — ' + month + '</h3>';
+    html += '  <h3>總覽 — ' + month + sealLabel + '</h3>';
     html += '  <div class="page-actions">';
     html += '    <button class="btn btn-secondary" onclick="window.print()">';
     html += '      <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>';
@@ -9441,6 +9514,30 @@ var OverviewPage = (function () {
     html += '</div>';
 
     container.innerHTML = html;
+  }
+
+  /* ===== Build seal/unseal label for the page header ===== */
+  /* Current month: no label */
+  /* Past month not sealed: gray "封存" clickable label */
+  /* Sealed month: green "已封存" + "解封" link */
+  function _buildSealLabel(month) {
+    var currentMonth = Utils.currentMonth();
+    if (month === currentMonth) return '';
+
+    if (State.isMonthClosed(month)) {
+      /* Sealed: green badge + unseal link */
+      return ' <span style="display:inline-block;padding:2px 8px;border-radius:var(--radius-full);' +
+        'background:rgba(22,163,74,0.1);color:#16a34a;font-size:var(--fs-xs);font-weight:600;' +
+        'margin-left:var(--sp-2);vertical-align:middle;">已封存</span>' +
+        ' <a href="javascript:void(0)" onclick="unsealMonthAction(\'' + month + '\')" ' +
+        'style="font-size:var(--fs-xs);color:var(--text-muted);margin-left:4px;text-decoration:underline;">解封</a>';
+    }
+
+    /* Past month not sealed: gray "封存" clickable label */
+    return ' <a href="javascript:void(0)" onclick="sealMonthAction(\'' + month + '\')" ' +
+      'style="display:inline-block;padding:2px 8px;border-radius:var(--radius-full);' +
+      'background:var(--bg-base);color:var(--text-muted);font-size:var(--fs-xs);font-weight:500;' +
+      'margin-left:var(--sp-2);vertical-align:middle;text-decoration:none;">封存</a>';
   }
 
   function _kpiCard(colorClass, label, value, unit, sub, iconSvg, large) {
@@ -9775,6 +9872,12 @@ var ProfitPage = (function () {
   /* ===== Silent update: chargeCompany ===== */
   function updateChargeCompany(inputEl, fbKey) {
     try {
+      /* Seal check */
+      var _sc = Bookings.getByKey(fbKey);
+      if (_sc && _sc.checkOut && State.isMonthClosed(_sc.checkOut.slice(0, 7))) {
+        Toast.warning('此月份已封存，不可修改');
+        return;
+      }
       var num = Number(inputEl.value) || 0;
       var updated = Bookings.update(fbKey, { chargeCompany: num });
       if (updated) {
@@ -9804,6 +9907,12 @@ var ProfitPage = (function () {
   /* ===== Silent update: currency ===== */
   function updateCurrency(selectEl, fbKey) {
     try {
+      /* Seal check */
+      var _sc = Bookings.getByKey(fbKey);
+      if (_sc && _sc.checkOut && State.isMonthClosed(_sc.checkOut.slice(0, 7))) {
+        Toast.warning('此月份已封存，不可修改');
+        return;
+      }
       var newCurr = selectEl.value;
       var updated = Bookings.update(fbKey, { currency: newCurr });
       if (updated) {
@@ -10178,6 +10287,12 @@ var FeesPage = (function () {
   /* ===== Silent update: volume ===== */
   function updateVolume(inputEl, fbKey) {
     try {
+      /* Seal check */
+      var _sc = Bookings.getByKey(fbKey);
+      if (_sc && _sc.checkOut && State.isMonthClosed(_sc.checkOut.slice(0, 7))) {
+        Toast.warning('此月份已封存，不可修改');
+        return;
+      }
       var wanValue = Number(inputEl.value) || 0;
       if (wanValue < 0) wanValue = 0;
       var volume = wanValue * 10000;
@@ -10197,6 +10312,12 @@ var FeesPage = (function () {
   /* ===== Silent update: chargeGuest ===== */
   function updateChargeGuest(inputEl, fbKey) {
     try {
+      /* Seal check */
+      var _sc = Bookings.getByKey(fbKey);
+      if (_sc && _sc.checkOut && State.isMonthClosed(_sc.checkOut.slice(0, 7))) {
+        Toast.warning('此月份已封存，不可修改');
+        return;
+      }
       var num = Number(inputEl.value) || 0;
       var updated = Bookings.update(fbKey, { chargeGuest: num });
       if (updated) {
@@ -10364,6 +10485,12 @@ var FeesPage = (function () {
 
   /* ===== Manual toggle fee status (no auto-determine) ===== */
   function toggleFee(fbKey, newFee) {
+    /* Seal check */
+    var _sc = Bookings.getByKey(fbKey);
+    if (_sc && _sc.checkOut && State.isMonthClosed(_sc.checkOut.slice(0, 7))) {
+      Toast.warning('此月份已封存，不可修改');
+      return;
+    }
     var data = { feeStatus: newFee };
     if (newFee === FEE_TYPES.FREE) {
       data.chargeGuest = 0;
@@ -11926,6 +12053,12 @@ function saveBookingForm() {
   if (!data.casino) { Toast.error('\u8acb\u9078\u64c7\u9ad4\u7cfb'); return; }
   if (!data.checkIn || !data.checkOut) { Toast.error('\u8acb\u9078\u64c7\u5165\u4f4f\u548c\u9000\u623f\u65e5\u671f'); return; }
 
+  /* Seal check — prevent saving if the booking's month is sealed */
+  if (data.checkOut && State.isMonthClosed(data.checkOut.slice(0, 7))) {
+    Toast.warning('此月份已封存，不可新增或修改訂房');
+    return;
+  }
+
   /* Check for duplicate (warn only) */
   var dups = Bookings.checkDuplicate(data.guestName, data.checkIn, data.casino);
   if (dups.length > 0 && !_editingBookingKey) {
@@ -11949,6 +12082,12 @@ function saveBookingForm() {
 function editBooking(fbKey) {
   var booking = Bookings.getByKey(fbKey);
   if (!booking) { Toast.error('\u627e\u4e0d\u5230\u8a02\u623f\u8a18\u9304'); return; }
+
+  /* Seal check — prevent editing if the booking's month is sealed */
+  if (booking.checkOut && State.isMonthClosed(booking.checkOut.slice(0, 7))) {
+    Toast.warning('此月份已封存，不可修改訂房');
+    return;
+  }
 
   /* Check edit permission */
   var rules = STATUS_RULES[booking.status] || { canEdit: true };
@@ -12039,6 +12178,12 @@ function viewBookingDetail(fbKey) {
 function deleteBooking(fbKey) {
   var b = Bookings.getByKey(fbKey);
   if (!b) return;
+
+  /* Seal check — prevent deletion if the booking's month is sealed */
+  if (b.checkOut && State.isMonthClosed(b.checkOut.slice(0, 7))) {
+    Toast.warning('此月份已封存，不可刪除訂房');
+    return;
+  }
 
   Modal.confirm(
     '\u78ba\u8a8d\u522a\u9664\u300c' + (b.guestName || '') + '\u300d\u7684\u8a02\u623f\u8a18\u9304\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u92b7\u3002',
@@ -12281,11 +12426,37 @@ function clearAllData() {
   );
 }
 
+/* ============================================================
+ * Month Seal / Unseal Actions (v2.1.6)
+ * ============================================================ */
+
+function sealMonthAction(monthStr) {
+  Modal.confirm(
+    '\u78ba\u8a8d\u5c01\u5b58\u300c' + monthStr + '\u300d\u6708\u7d50\u8cc7\u6599\uff1f\u5c01\u5b58\u5f8c\u8a72\u6708\u4efd\u8a02\u623f\u5c07\u9396\u5b9a\uff0c\u4e0d\u53ef\u65b0\u589e\u3001\u4fee\u6539\u6216\u522a\u9664\u3002',
+    function () {
+      State.sealMonth(monthStr);
+      Toast.success(monthStr + ' \u5df2\u5c01\u5b58');
+    },
+    { title: '\u6708\u7d50\u5c01\u5b58', confirmText: '\u78ba\u8a8d\u5c01\u5b58' }
+  );
+}
+
+function unsealMonthAction(monthStr) {
+  Modal.confirm(
+    '\u26a0\ufe0f \u78ba\u8a8d\u89e3\u5c01\u300c' + monthStr + '\u300d\u6708\u7d50\u8cc7\u6599\uff1f\u89e3\u5c01\u5f8c\u8a72\u6708\u4efd\u8a02\u623f\u5c07\u53ef\u4ee5\u88ab\u4fee\u6539\uff0c\u8acb\u78ba\u8a8d\u662f\u5426\u771f\u7684\u9700\u8981\u89e3\u5c01\u3002',
+    function () {
+      State.unsealMonth(monthStr);
+      Toast.success(monthStr + ' \u5df2\u89e3\u5c01');
+    },
+    { title: '\u89e3\u5c01\u6708\u7d50', confirmText: '\u78ba\u8a8d\u89e3\u5c01' }
+  );
+}
+
 </script>
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783784344306";
+window.BUILD_VERSION = "1783788952511";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
