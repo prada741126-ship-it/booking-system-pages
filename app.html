@@ -10496,7 +10496,7 @@ var ProfitPage = (function () {
     var isOverdue = false;
     if (isCheckOut && b.checkOut) {
       var todayStr = Utils.today();
-      var diffDays = Utils.daysBetween(todayStr, b.checkOut);
+      var diffDays = Utils.daysBetween(b.checkOut, todayStr);
       if (diffDays > CONFIG.CHECKOUT_OVERDUE_DAYS) {
         isOverdue = true;
       }
@@ -13490,7 +13490,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783874075390";
+window.BUILD_VERSION = "1783874882923";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
