@@ -2753,6 +2753,39 @@ textarea.form-control {
   margin-left: 2px;
 }
 
+/* ===== Batch Archive & Checkbox Styles (v2.2.0) ===== */
+.batch-archive-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.archive-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  vertical-align: middle;
+}
+
+.archive-checkbox:hover {
+  opacity: 0.8;
+}
+
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
 
 /* ===== css/mobile.css ===== */
 /* ============================================================
@@ -3253,7 +3286,7 @@ textarea.form-control {
         <span id="sync-status-text">未連線</span>
         <span style="margin-left:auto;" id="last-sync-time">--</span>
       </div>
-      <div class="version-label">v2.1.8</div>
+      <div class="version-label">v2.2.0</div>
     </div>
   </aside>
 
@@ -3378,7 +3411,7 @@ textarea.form-control {
 
 /* ===== App Info ===== */
 var APP = {
-  VERSION: '2.1.8',
+  VERSION: '2.2.0',
   TITLE: 'VIP Booking System',
   SYSTEM_NAME: 'BookingHub'
 };
@@ -3395,7 +3428,8 @@ var CONFIG = {
   REMINDER_DAYS_BEFORE: 3,   // remind 3 days before check-in
   DAILY_SCAN_TIME: '09:00',  // daily status scan at 9am
   RECENT_AGENT_LIMIT: 5,     // remember last 5 agents per employee
-  ARCHIVE_AUTO_DAYS: 0      // auto-archive immediately on checkout/cancel
+  CHECKOUT_OVERDUE_DAYS: 7,  // checked-out bookings older than this are marked overdue
+  ARCHIVE_AUTO_DAYS: 0,     // cancelled auto-archive immediately; checked-out deferred to manual
 };
 
 /* ===== Storage Keys ===== */
@@ -3641,8 +3675,8 @@ var STATUS_AUTO_TRANSITION = {
   toCheckedIn: ['pending', 'confirmed'],
   /* If checkOut date <= today and status is checked-in -> checked-out */
   toCheckedOut: ['checked-in'],
-  /* checked-out & cancelled -> auto archive */
-  toArchive: ['checked-out', 'cancelled']
+  /* cancelled -> auto archive immediately; checked-out stays active for manual settlement */
+  toArchive: ['cancelled']
 };
 
 /* ===== Room Fee Rate (auto-calc) ===== */
@@ -7509,7 +7543,7 @@ var Bookings = {
           newStatus: newStatus
         });
 
-        /* Auto-archive if checked-out */
+        /* Auto-archive if cancelled (checked-out deferred to manual settlement) */
         if (STATUS_AUTO_TRANSITION.toArchive.indexOf(newStatus) !== -1) {
           Bookings.archive(b._fbKey);
         }
@@ -9994,7 +10028,10 @@ var OverviewPage = (function () {
     html += _statusRow('待確認', sc.pending || 0, total, UI_COLORS.statusPending);
     html += _statusRow('已確認', sc.confirmed || 0, total, UI_COLORS.statusConfirmed);
     html += _statusRow('已入住', sc['checked-in'] || 0, total, UI_COLORS.statusCheckedIn);
-    html += _statusRow('已退房', sc['checked-out'] || 0, total, UI_COLORS.statusCheckedOut);
+    /* Checked-out: highlight in red when pending settlement (count > 0) */
+    var checkoutCount = sc['checked-out'] || 0;
+    var checkoutColor = checkoutCount > 0 ? UI_COLORS.danger : UI_COLORS.statusCheckedOut;
+    html += _statusRow('已退房（待結算）', checkoutCount, total, checkoutColor);
     html += _statusRow('已取消', sc.cancelled || 0, total, UI_COLORS.statusCancelled);
     html += '</div>';
 
@@ -10256,6 +10293,7 @@ function renderOverview() { OverviewPage.render(); }
 var ProfitPage = (function () {
 
   var _filterFee = '';  /* '', 'free', 'paid' */
+  var _filterPending = false;  /* true: only show checked-out (pending settlement) */
 
   /* Pagination state */
   var _page = 1;
@@ -10264,11 +10302,18 @@ var ProfitPage = (function () {
   var _sortAsc = true;
   var _expandAll = false;
 
+  /* Selected bookings for batch archive (Set of fbKey, persists across pages) */
+  var _selectedSet = new Set();
+
   /* ===== Data helper: returns {filtered, sorted, pageData} ===== */
   function _getData() {
     var month = State.get('workingMonth') || Utils.currentMonth();
     var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
     var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
+    /* Pending settlement filter: only checked-out */
+    if (_filterPending) {
+      filtered = filtered.filter(function (b) { return b.status === BOOKING_STATUS.CHECKED_OUT; });
+    }
     var searched = Paginator.filterBySearch(filtered, _search);
     var sorted = Paginator.sortBy(searched, _sortField, _sortAsc);
     var pageData = Paginator.getPage(sorted, _page, _expandAll);
@@ -10286,6 +10331,10 @@ var ProfitPage = (function () {
 
     var data = _getData();
     var pages = Paginator.totalPages(data.sorted, _expandAll);
+
+    /* Count pending settlement (checked-out) bookings */
+    var pendingCount = monthBookings.filter(function (b) { return b.status === BOOKING_STATUS.CHECKED_OUT; }).length;
+    var selectedCount = _selectedSet.size;
 
     var html = '';
 
@@ -10323,6 +10372,23 @@ var ProfitPage = (function () {
     html += '利潤 = 向客人收 − 交公司。免費房以灰色顯示，不需填入交公司金額。';
     html += '</div>';
 
+    /* Batch archive toolbar */
+    html += '<div class="batch-archive-toolbar" style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3);flex-wrap:wrap;">';
+    html += '<button class="btn btn-sm ' + (_filterPending ? 'btn-primary' : 'btn-secondary') + '" onclick="ProfitPage.togglePendingFilter()">';
+    html += _filterPending ? '✓ 只顯示待結算' : '只顯示待結算';
+    html += '</button>';
+    if (pendingCount > 0) {
+      html += '<span class="pending-badge">' + pendingCount + ' 筆待結算</span>';
+    }
+    html += '<span style="flex:1;"></span>';
+    if (selectedCount > 0) {
+      html += '<button class="btn btn-sm btn-danger" onclick="ProfitPage.batchArchive()">';
+      html += '📦 歸檔已選 (' + selectedCount + ')';
+      html += '</button>';
+      html += '<button class="btn btn-sm btn-ghost" onclick="ProfitPage.clearSelection()">清除勾選</button>';
+    }
+    html += '</div>';
+
     /* Toolbar: search + expand toggle */
     html += Paginator.renderToolbar(
       Paginator.renderSearch(_search, 'ProfitPage.onSearch', '搜索客人姓名、代理、酒店...'),
@@ -10334,6 +10400,7 @@ var ProfitPage = (function () {
     } else {
       html += '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint scrollable">';
       html += '<table class="data-table"><thead><tr>';
+      html += '<th style="width:36px;text-align:center;">勾選</th>';
       html += Paginator.renderTH('代理', 'agent', _sortField, _sortAsc, 'ProfitPage.sortByCol');
       html += Paginator.renderTH('客人', 'guestName', _sortField, _sortAsc, 'ProfitPage.sortByCol');
       html += '<th>酒店</th>';
@@ -10392,6 +10459,7 @@ var ProfitPage = (function () {
   function onSearch(term) {
     _search = term;
     _page = 1;
+    _selectedSet.clear();
     _renderBody();
   }
 
@@ -10403,6 +10471,7 @@ var ProfitPage = (function () {
       _sortAsc = (field === 'agent' || field === 'guestName' ? true : false);
     }
     _page = 1;
+    _selectedSet.clear();
     _renderBody();
   }
 
@@ -10420,10 +10489,37 @@ var ProfitPage = (function () {
     var chargeGuest = Number(b.chargeGuest) || 0;
     var chargeCompany = Number(b.chargeCompany) || 0;
     var profit = chargeGuest - chargeCompany;
+    var isCheckOut = b.status === BOOKING_STATUS.CHECKED_OUT;
+    var isChecked = _selectedSet.has(b._fbKey);
+
+    /* Overdue: checked-out more than CHECKOUT_OVERDUE_DAYS ago */
+    var isOverdue = false;
+    if (isCheckOut && b.checkOut) {
+      var todayStr = Utils.today();
+      var diffDays = Utils.daysBetween(todayStr, b.checkOut);
+      if (diffDays > CONFIG.CHECKOUT_OVERDUE_DAYS) {
+        isOverdue = true;
+      }
+    }
+
+    var rowStyle = '';
+    if (!isPaid) rowStyle = 'opacity:0.5;';
+    if (isOverdue) rowStyle += 'background:rgba(239,68,68,0.08);';
 
     var html = '<tr data-fbkey="' + Utils.escapeHtml(b._fbKey || '') + '"'
-      + (isPaid ? '' : ' style="opacity:0.5;')
-      + '">';
+      + (rowStyle ? ' style="' + rowStyle + '"' : '') + '>';
+
+    /* Checkbox cell (only checked-out can be checked) */
+    html += '<td style="text-align:center;">';
+    if (isCheckOut) {
+      html += '<input type="checkbox" class="archive-checkbox"' + (isChecked ? ' checked' : '') + ' ';
+      html += 'onchange="ProfitPage.toggleSelect(\'' + Utils.escapeHtml(b._fbKey || '') + '\', this)"';
+      if (isOverdue) html += ' title="此訂房已超期未結算"';
+      html += '>';
+    } else {
+      html += '<span style="color:var(--text-muted);font-size:var(--fs-xs);">-</span>';
+    }
+    html += '</td>';
 
     html += '<td style="font-weight:600;">' + Utils.escapeHtml(b.agent || '-') + '</td>';
     html += '<td>' + Utils.escapeHtml(b.guestName || '-') + '</td>';
@@ -10482,7 +10578,7 @@ var ProfitPage = (function () {
     var totals = _calcTotals(bookings);
 
     var html = '<tr id="profit-summary-row" style="background:var(--bg-base);font-weight:700;border-top:2px solid var(--border-default);">';
-    html += '<td colspan="3">合計</td>';
+    html += '<td colspan="4">合計</td>';
     html += '<td class="num-cell">' + Utils.formatCurrency(totals.chargeGuest, CURRENCY_DEFAULT) + '</td>';
     html += '<td class="num-cell">' + Utils.formatCurrency(totals.chargeCompany, CURRENCY_DEFAULT) + '</td>';
     html += '<td class="num-cell" style="color:' + (totals.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)') + ';">' + Utils.formatCurrency(totals.profit, CURRENCY_DEFAULT) + '</td>';
@@ -10606,7 +10702,7 @@ var ProfitPage = (function () {
     var data = _getData();
     var totals = _calcTotals(data.filtered);
 
-    summaryRow.innerHTML = '<td colspan="3">合計</td>';
+    summaryRow.innerHTML = '<td colspan="4">合計</td>';
     summaryRow.innerHTML += '<td class="num-cell">' + Utils.formatCurrency(totals.chargeGuest, CURRENCY_DEFAULT) + '</td>';
     summaryRow.innerHTML += '<td class="num-cell">' + Utils.formatCurrency(totals.chargeCompany, CURRENCY_DEFAULT) + '</td>';
     summaryRow.innerHTML += '<td class="num-cell" style="color:' + (totals.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)') + ';">' + Utils.formatCurrency(totals.profit, CURRENCY_DEFAULT) + '</td>';
@@ -10636,6 +10732,7 @@ var ProfitPage = (function () {
     _filterFee = fee;
     _page = 1;
     _search = '';
+    _selectedSet.clear();
     render();
   }
 
@@ -10655,6 +10752,79 @@ var ProfitPage = (function () {
     return html;
   }
 
+  /* ===== Toggle checkbox selection (cross-page persistence) ===== */
+  function toggleSelect(fbKey, checkboxEl) {
+    if (checkboxEl.checked) {
+      _selectedSet.add(fbKey);
+    } else {
+      _selectedSet.delete(fbKey);
+    }
+    /* Update batch archive toolbar count */
+    _updateBatchToolbar();
+  }
+
+  /* ===== Toggle "only pending settlement" filter ===== */
+  function togglePendingFilter() {
+    _filterPending = !_filterPending;
+    _page = 1;
+    _selectedSet.clear();
+    render();
+  }
+
+  /* ===== Clear all selections ===== */
+  function clearSelection() {
+    _selectedSet.clear();
+    render();
+  }
+
+  /* ===== Batch archive selected bookings ===== */
+  function batchArchive() {
+    if (_selectedSet.size === 0) {
+      Toast.warning('請先勾選要歸檔的訂房');
+      return;
+    }
+
+    /* Build list of selected bookings for confirmation */
+    var items = [];
+    var invalid = [];
+    _selectedSet.forEach(function (fbKey) {
+      var b = Bookings.getByKey(fbKey);
+      if (b && b.status === BOOKING_STATUS.CHECKED_OUT && !b.archived) {
+        items.push(b);
+      } else {
+        invalid.push(fbKey);
+      }
+    });
+
+    if (items.length === 0) {
+      Toast.warning('沒有可歸檔的已退房訂房');
+      _selectedSet.clear();
+      render();
+      return;
+    }
+
+    /* Remove invalid keys from selection */
+    invalid.forEach(function (fbKey) { _selectedSet.delete(fbKey); });
+
+    /* Call bridge function to show confirmation modal */
+    if (typeof confirmBatchArchive === 'function') {
+      confirmBatchArchive(items);
+    }
+  }
+
+  /* ===== Update batch archive toolbar count in-place ===== */
+  function _updateBatchToolbar() {
+    var count = _selectedSet.size;
+    var archiveBtn = document.querySelector('.batch-archive-toolbar .btn-danger');
+    if (archiveBtn && count > 0) {
+      /* Just update the count text */
+      archiveBtn.textContent = '📦 歸檔已選 (' + count + ')';
+    } else {
+      /* Button doesn't exist yet (0→1) or count is 0 (1→0) — need full re-render */
+      render();
+    }
+  }
+
   function _emptyStateMini(text) {
     return '<div style="padding:var(--sp-6);text-align:center;color:var(--text-muted);font-size:var(--fs-sm);">' + Utils.escapeHtml(text) + '</div>';
   }
@@ -10667,7 +10837,11 @@ var ProfitPage = (function () {
     toggleExpand: toggleExpand,
     updateChargeCompany: updateChargeCompany,
     updateCurrency: updateCurrency,
-    setFilter: setFilter
+    setFilter: setFilter,
+    toggleSelect: toggleSelect,
+    togglePendingFilter: togglePendingFilter,
+    batchArchive: batchArchive,
+    clearSelection: clearSelection
   };
 })();
 
@@ -13206,8 +13380,89 @@ function clearAllData() {
 }
 
 /* ============================================================
- * Month Seal / Unseal Actions (v2.1.6)
+ * Batch Archive — Confirm and Archive Multiple Bookings
  * ============================================================ */
+
+function confirmBatchArchive(items) {
+  if (!items || items.length === 0) return;
+
+  /* Build confirmation modal body listing all selected bookings */
+  var body = '<div style="margin-bottom:var(--sp-3);color:var(--text-secondary);font-size:var(--fs-sm);">';
+  body += '以下 <b>' + items.length + '</b> 筆已退房訂房將被歸檔，歸檔後可在「歷史核帳」頁面查看：';
+  body += '</div>';
+
+  body += '<div class="data-table-wrap" style="max-height:300px;overflow-y:auto;"><div class="data-table-scroll"><table class="data-table"><thead><tr>';
+  body += '<th>客人</th><th>酒店</th><th>退房日期</th><th>費用</th>';
+  body += '</tr></thead><tbody>';
+
+  for (var i = 0; i < items.length; i++) {
+    var b = items[i];
+    body += '<tr>';
+    body += '<td style="font-weight:600;">' + Utils.escapeHtml(b.guestName || '-') + '</td>';
+    body += '<td style="font-size:var(--fs-sm);">' + Utils.escapeHtml(b.hotel || '-') + '</td>';
+    body += '<td style="font-size:var(--fs-sm);">' + Utils.formatDateDisplay(b.checkOut) + '</td>';
+    body += '<td><span class="fee-badge ' + (b.feeStatus || 'free') + '">' + (FEE_TYPE_LABELS[b.feeStatus] || '免費') + '</span></td>';
+    body += '</tr>';
+  }
+
+  body += '</tbody></table></div></div>';
+
+  body += '<div style="margin-top:var(--sp-3);padding:var(--sp-3);background:rgba(239,68,68,0.06);border-radius:var(--radius-md);font-size:var(--fs-sm);color:var(--text-secondary);">';
+  body += '\u26a0\ufe0f \u6b78\u6a94\u5f8c\u8a02\u623f\u5c07\u5f9e\u5217\u8868\u4e2d\u6d88\u5931\uff0c\u8acb\u78ba\u8a8d\u5df2\u5b8c\u6210\u6240\u6709\u8cbb\u7528\u7d50\u7b97\u3002';
+  body += '</div>';
+
+  var footer = '<button class="btn btn-secondary" data-modal-close>\u53d6\u6d88</button>';
+  footer += '<button class="btn btn-danger" onclick="executeBatchArchive()">\u78ba\u8a8d\u6b78\u6a94</button>';
+
+  /* Store items for the confirm handler */
+  window._batchArchiveItems = items;
+
+  Modal.open({
+    title: '\u78ba\u8a8d\u6b78\u6a94 ' + items.length + ' \u7b46\u8a02\u623f',
+    body: body,
+    footer: footer,
+    size: 'md'
+  });
+}
+
+function executeBatchArchive() {
+  var items = window._batchArchiveItems;
+  if (!items || items.length === 0) return;
+
+  var successCount = 0;
+  var failCount = 0;
+  for (var i = 0; i < items.length; i++) {
+    try {
+      var result = Bookings.archive(items[i]._fbKey);
+      if (result) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    } catch (e) {
+      console.error('[BatchArchive] Error archiving:', items[i]._fbKey, e);
+      failCount++;
+    }
+  }
+
+  /* Clear selection */
+  if (typeof ProfitPage !== 'undefined' && ProfitPage.clearSelection) {
+    ProfitPage.clearSelection();
+  }
+
+  window._batchArchiveItems = null;
+  Modal.close();
+
+  if (failCount === 0) {
+    Toast.success(successCount + ' \u7b46\u8a02\u623f\u5df2\u6b78\u6a94');
+  } else {
+    Toast.show('\u6b78\u6a94\u5b8c\u6210\uff1a' + successCount + ' \u6210\u529f\uff0c' + failCount + ' \u5931\u6557', 'warning');
+  }
+
+  Events.emit(EVENTS.UI_RENDER);
+}
+
+
 
 function sealMonthAction(monthStr) {
   Modal.confirm(
@@ -13235,7 +13490,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783864149973";
+window.BUILD_VERSION = "1783874075390";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
