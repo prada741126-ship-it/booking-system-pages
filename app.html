@@ -2629,6 +2629,130 @@ textarea.form-control {
   color: var(--text-muted);
 }
 
+/* ===== Paginator (v2.2.0) ===== */
+.paginator-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  margin-top: var(--sp-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.paginator-info {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.paginator-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.paginator-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: all var(--tr-fast);
+  user-select: none;
+}
+
+.paginator-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.paginator-btn-active {
+  background: var(--grad-primary);
+  color: white;
+  border-color: var(--color-primary);
+  font-weight: var(--fw-bold);
+}
+
+.paginator-btn-active:hover {
+  background: var(--grad-primary);
+  color: white;
+}
+
+.paginator-btn-disabled,
+.paginator-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.paginator-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  user-select: none;
+}
+
+.paginator-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: all var(--tr-fast);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.paginator-expand-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.paginator-expand-btn.active {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* Sortable table headers */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--tr-fast);
+}
+
+.sortable-th:hover {
+  color: var(--color-primary);
+}
+
+.sort-arrow {
+  font-size: var(--fs-xs);
+  color: var(--color-primary);
+  margin-left: 2px;
+}
+
 
 /* ===== css/mobile.css ===== */
 /* ============================================================
@@ -9604,14 +9728,209 @@ function closeModal() { Modal.close(); }
 
 </script>
 
+<!-- ===== src/ui/paginator.js ===== -->
+<script>
+/**
+ * paginator.js — Generic Table Pagination + Search + Sort + Expand helpers
+ * Booking System v2.2.0
+ * Provides: filter/search, sort, page slice, nav rendering, search box, sortable TH, expand toggle
+ * Each page module keeps its own state (_page, _search, _sortField, _sortAsc, _expandAll)
+ * and calls these helpers during render.
+ */
+var Paginator = (function () {
+  var PAGE_SIZE = 10;
+
+  /* ===== Data helpers (pure functions) ===== */
+
+  /** Filter bookings by search term across guestName, agent, hotel */
+  function filterBySearch(bookings, term) {
+    if (!term) return bookings.slice();
+    var t = term.toLowerCase();
+    return bookings.filter(function (b) {
+      return (b.guestName || '').toLowerCase().indexOf(t) !== -1 ||
+             (b.agent || '').toLowerCase().indexOf(t) !== -1 ||
+             (b.hotel || '').toLowerCase().indexOf(t) !== -1 ||
+             (b.casino || '').toLowerCase().indexOf(t) !== -1;
+    });
+  }
+
+  /** Sort bookings by field (checkIn, guestName, agent, hotel, _createdAt) */
+  function sortBy(bookings, field, asc) {
+    var sorted = bookings.slice();
+    sorted.sort(function (a, b) {
+      var va, vb;
+      if (field === 'checkIn') {
+        va = (a.checkIn || '');
+        vb = (b.checkIn || '');
+      } else if (field === 'guestName') {
+        va = (a.guestName || '').toLowerCase();
+        vb = (b.guestName || '').toLowerCase();
+      } else if (field === 'agent') {
+        va = (a.agent || '').toLowerCase();
+        vb = (b.agent || '').toLowerCase();
+      } else if (field === 'hotel') {
+        va = (a.hotel || '').toLowerCase();
+        vb = (b.hotel || '').toLowerCase();
+      } else if (field === '_createdAt') {
+        va = a._createdAt || 0;
+        vb = b._createdAt || 0;
+      } else {
+        va = (a[field] !== undefined ? String(a[field]) : '').toLowerCase();
+        vb = (b[field] !== undefined ? String(b[field]) : '').toLowerCase();
+      }
+      if (va < vb) return asc ? -1 : 1;
+      if (va > vb) return asc ? 1 : -1;
+      /* Secondary sort by checkIn desc for tie-breaking */
+      var ca = (a.checkIn || '');
+      var cb = (b.checkIn || '');
+      return ca < cb ? 1 : ca > cb ? -1 : 0;
+    });
+    return sorted;
+  }
+
+  /** Get a page slice from sorted array */
+  function getPage(sorted, pageNum, expandAll) {
+    if (expandAll) return sorted;
+    var start = (pageNum - 1) * PAGE_SIZE;
+    return sorted.slice(start, start + PAGE_SIZE);
+  }
+
+  /** Calculate total pages */
+  function totalPages(sorted, expandAll) {
+    if (expandAll || sorted.length === 0) return 1;
+    return Math.ceil(sorted.length / PAGE_SIZE);
+  }
+
+  /* ===== HTML rendering helpers ===== */
+
+  /** Render search box HTML.
+   *  onSearchFn: name of the page's search handler function (e.g. 'FeesPage.onSearch') */
+  function renderSearch(term, onSearchFn, placeholder) {
+    var ph = placeholder || '搜索客人姓名、代理...';
+    var escFn = onSearchFn || '';
+    var html = '<div class="search-box" style="margin-bottom:var(--sp-3);">';
+    html += '<svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
+    html += '<input type="text" class="form-control" id="paginator-search-input" placeholder="' + Utils.escapeHtml(ph) + '" value="' + Utils.escapeHtml(term || '') + '" oninput="' + escFn + '(this.value)">';
+    if (term) {
+      html += '<span class="search-clear" style="display:flex;cursor:pointer;" onclick="' + escFn + '(\'\')"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></span>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  /** Render page navigation bar
+   *  onClickPage: function name that takes page number, e.g. 'FeesPage.goPage' */
+  function renderNav(currentPage, totalPages, totalItems, onClickPage) {
+    if (totalPages <= 1) return '';
+
+    var fn = onClickPage || '';
+    var html = '<div class="paginator-nav">';
+    html += '<span class="paginator-info">第 ' + currentPage + '/' + totalPages + ' 頁，共 ' + totalItems + ' 筆</span>';
+    html += '<div class="paginator-btns">';
+
+    /* Prev */
+    if (currentPage > 1) {
+      html += '<button class="paginator-btn" onclick="' + fn + '(' + (currentPage - 1) + ')">上一頁</button>';
+    } else {
+      html += '<button class="paginator-btn paginator-btn-disabled" disabled>上一頁</button>';
+    }
+
+    /* Page numbers */
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+
+    if (startPage > 1) {
+      html += '<button class="paginator-btn" onclick="' + fn + '(1)">1</button>';
+      if (startPage > 2) html += '<span class="paginator-ellipsis">...</span>';
+    }
+
+    for (var p = startPage; p <= endPage; p++) {
+      if (p === currentPage) {
+        html += '<button class="paginator-btn paginator-btn-active">' + p + '</button>';
+      } else {
+        html += '<button class="paginator-btn" onclick="' + fn + '(' + p + ')">' + p + '</button>';
+      }
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) html += '<span class="paginator-ellipsis">...</span>';
+      html += '<button class="paginator-btn" onclick="' + fn + '(' + totalPages + ')">' + totalPages + '</button>';
+    }
+
+    /* Next */
+    if (currentPage < totalPages) {
+      html += '<button class="paginator-btn" onclick="' + fn + '(' + (currentPage + 1) + ')">下一頁</button>';
+    } else {
+      html += '<button class="paginator-btn paginator-btn-disabled" disabled>下一頁</button>';
+    }
+
+    html += '</div></div>';
+    return html;
+  }
+
+  /** Render expand/collapse toggle button */
+  function renderExpandToggle(expanded, onClickFn) {
+    var fn = onClickFn || '';
+    return '<button class="paginator-expand-btn' + (expanded ? ' active' : '') + '" onclick="' + fn + '(' + (expanded ? 'false' : 'true') + ')">' +
+      (expanded ? '切換分頁' : '全部展開') + '</button>';
+  }
+
+  /** Render sortable table header <th>.
+   *  Returns HTML string with onclick for sorting.
+   *  currentField: the currently sorted field
+   *  currentAsc: current sort direction
+   *  sortFn: function name, e.g. 'FeesPage.sortBy' */
+  function renderTH(label, field, currentField, currentAsc, sortFn, extraClass) {
+    var fn = sortFn || '';
+    var cls = extraClass ? ' ' + extraClass : '';
+    var arrow = '';
+    if (field === currentField) {
+      arrow = currentAsc ? ' ▲' : ' ▼';
+    }
+    return '<th class="sortable-th' + cls + '" onclick="' + fn + '(\'' + field + '\')" style="cursor:pointer;">' +
+      Utils.escapeHtml(label) + '<span class="sort-arrow">' + arrow + '</span></th>';
+  }
+
+  /** Build a toolbar row with search + expand toggle */
+  function renderToolbar(searchHTML, expandHTML) {
+    return '<div style="display:flex;align-items:center;gap:var(--sp-3);">' +
+      '<div style="flex:1;">' + searchHTML + '</div>' +
+      expandHTML +
+      '</div>';
+  }
+
+  /* ===== Exports ===== */
+  return {
+    PAGE_SIZE: PAGE_SIZE,
+    filterBySearch: filterBySearch,
+    sortBy: sortBy,
+    getPage: getPage,
+    totalPages: totalPages,
+    renderSearch: renderSearch,
+    renderNav: renderNav,
+    renderExpandToggle: renderExpandToggle,
+    renderTH: renderTH,
+    renderToolbar: renderToolbar
+  };
+})();
+
+</script>
+
 <!-- ===== src/pages/overview.js ===== -->
 <script>
 /**
  * overview.js — Overview / Dashboard Page
- * Booking System v2.0.0 (v8 spec)
- * Renders: KPI cards (bookings/nights/threshold/profit) + status distribution + recent bookings + fee breakdown
+ * Booking System v2.2.0
+ * Renders: KPI cards (bookings/nights/threshold/profit) + status distribution + paginated booking list + fee breakdown
  */
 var OverviewPage = (function () {
+
+  /* Pagination state */
+  var _page = 1;
+  var _search = '';
+  var _sortField = 'checkIn';
+  var _sortAsc = false;  /* default: checkIn desc (newest first) */
+  var _expandAll = false;
 
   function render() {
     var container = document.getElementById('page-overview');
@@ -9626,8 +9945,11 @@ var OverviewPage = (function () {
     var monthlyKPIs = Stats.calcMonthlyNights(monthBookings, month);
     var total = summ.totalBookings; /* used for status distribution percentages */
 
-    /* Recent bookings: filtered by check-in month (original logic), but show creation date */
-    var recent = Filters.sortBookings(monthBookings, '_createdAt', false).slice(0, 8);
+    /* Paginated data */
+    var searched = Paginator.filterBySearch(monthBookings, _search);
+    var sorted = Paginator.sortBy(searched, _sortField, _sortAsc);
+    var pageData = Paginator.getPage(sorted, _page, _expandAll);
+    var pages = Paginator.totalPages(sorted, _expandAll);
 
     var html = '';
 
@@ -9658,7 +9980,7 @@ var OverviewPage = (function () {
 
     html += '</div>';
 
-    /* Second row: status distribution + recent bookings */
+    /* Second row: status distribution + fee breakdown */
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4);">';
 
     /* Status distribution */
@@ -9695,40 +10017,89 @@ var OverviewPage = (function () {
 
     html += '</div>';
 
-    /* Recent bookings */
+    /* ===== Paginated Booking List ===== */
     html += '<div class="card">';
     html += '  <div class="card-title">';
     html += '    <div class="card-icon"><svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></div>';
-    html += '    最近訂房';
+    html += '    訂房明細';
+    html += '    <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:400;margin-left:var(--sp-2);">' + sorted.length + ' 筆</span>';
     html += '  </div>';
 
-    if (recent.length === 0) {
+    /* Toolbar: search + expand toggle */
+    html += Paginator.renderToolbar(
+      Paginator.renderSearch(_search, 'OverviewPage.onSearch', '搜索客人姓名、代理、酒店、體系...'),
+      Paginator.renderExpandToggle(_expandAll, 'OverviewPage.toggleExpand')
+    );
+
+    if (sorted.length === 0) {
       html += _emptyStateMini('暫無訂房記錄，點擊「新增訂房」開始');
     } else {
-      html += '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint' + (recent.length > 0 ? ' scrollable' : '') + '">';
+      html += '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint scrollable">';
       html += '<table class="data-table"><thead><tr>';
-      html += '<th>客人</th><th>體系</th><th>入住</th><th>退房</th><th style="text-align:center;">入住天數</th><th>代理</th><th>費用</th><th>狀態</th><th>創建日期</th><th>登錄人</th>';
+      html += Paginator.renderTH('客人', 'guestName', _sortField, _sortAsc, 'OverviewPage.sortByCol');
+      html += Paginator.renderTH('體系', 'casino', _sortField, _sortAsc, 'OverviewPage.sortByCol');
+      html += Paginator.renderTH('入住', 'checkIn', _sortField, _sortAsc, 'OverviewPage.sortByCol');
+      html += '<th>退房</th>';
+      html += '<th style="text-align:center;">入住天數</th>';
+      html += Paginator.renderTH('代理', 'agent', _sortField, _sortAsc, 'OverviewPage.sortByCol');
+      html += '<th>費用</th><th>狀態</th>';
+      html += Paginator.renderTH('創建日期', '_createdAt', _sortField, _sortAsc, 'OverviewPage.sortByCol');
+      html += '<th>登錄人</th>';
       html += '</tr></thead><tbody>';
-      for (var i = 0; i < recent.length; i++) {
-        html += _recentRow(recent[i]);
+
+      for (var i = 0; i < pageData.length; i++) {
+        html += _recentRow(pageData[i]);
       }
+
       html += '</tbody></table></div></div>';
+
+      /* Pagination nav */
+      html += Paginator.renderNav(_page, pages, sorted.length, 'OverviewPage.goPage');
     }
     html += '</div>';
 
     container.innerHTML = html;
   }
 
+  /* ===== Re-render helpers (for pagination controls) ===== */
+  function _rerender() {
+    render();
+  }
+
+  function goPage(n) {
+    _page = n;
+    _rerender();
+  }
+
+  function onSearch(term) {
+    _search = term;
+    _page = 1;
+    _rerender();
+  }
+
+  function sortByCol(field) {
+    if (_sortField === field) {
+      _sortAsc = !_sortAsc;
+    } else {
+      _sortField = field;
+      _sortAsc = (field === 'checkIn' ? false : true);
+    }
+    _page = 1;
+    _rerender();
+  }
+
+  function toggleExpand(val) {
+    _expandAll = val;
+    _page = 1;
+    _rerender();
+  }
+
   /* ===== Build seal/unseal label for the page header ===== */
-  /* Current month: no label */
-  /* Past month not sealed: gray "封存" clickable label */
-  /* Sealed month: green "已封存" + "解封" link */
   function _buildSealLabel(month) {
     var currentMonth = Utils.currentMonth();
     if (month === currentMonth) return '';
 
     if (State.isMonthClosed(month)) {
-      /* Sealed: green badge + unseal link */
       return ' <span style="display:inline-block;padding:2px 8px;border-radius:var(--radius-full);' +
         'background:rgba(22,163,74,0.1);color:#16a34a;font-size:var(--fs-xs);font-weight:600;' +
         'margin-left:var(--sp-2);vertical-align:middle;">已封存</span>' +
@@ -9736,7 +10107,6 @@ var OverviewPage = (function () {
         'style="font-size:var(--fs-xs);color:var(--text-muted);margin-left:4px;text-decoration:underline;">解封</a>';
     }
 
-    /* Past month not sealed: gray "封存" clickable label */
     return ' <a href="javascript:void(0)" onclick="sealMonthAction(\'' + month + '\')" ' +
       'style="display:inline-block;padding:2px 8px;border-radius:var(--radius-full);' +
       'background:var(--bg-base);color:var(--text-muted);font-size:var(--fs-xs);font-weight:500;' +
@@ -9805,7 +10175,6 @@ var OverviewPage = (function () {
     var paidColor = '#f59e0b';
 
     var html = '<div style="display:flex;align-items:center;gap:var(--sp-4);">';
-    /* Donut chart using conic-gradient */
     html += '<div style="width:110px;height:110px;border-radius:50%;';
     html += 'background:conic-gradient(' + freeColor + ' 0% ' + freePct.toFixed(1) + '%, ' + paidColor + ' ' + freePct.toFixed(1) + '% 100%);';
     html += 'display:flex;align-items:center;justify-content:center;flex-shrink:0;';
@@ -9814,7 +10183,6 @@ var OverviewPage = (function () {
     html += '<span style="font-size:var(--fs-xl);font-weight:var(--fw-extrabold);color:var(--text-primary);">' + total + '</span>';
     html += '<span style="font-size:var(--fs-xs);color:var(--text-muted);">總房數</span>';
     html += '</div></div>';
-    /* Legend */
     html += '<div style="flex:1;">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:var(--sp-2);">';
     html += '<span style="width:10px;height:10px;border-radius:2px;background:' + freeColor + ';flex-shrink:0;"></span>';
@@ -9844,7 +10212,6 @@ var OverviewPage = (function () {
     return html;
   }
 
-  /* Format timestamp (Date.now) to MM/DD */
   function _fmtTimestamp(ts) {
     if (!ts) return '-';
     var d = new Date(ts);
@@ -9862,7 +10229,13 @@ var OverviewPage = (function () {
            Utils.escapeHtml(text) + '</div>';
   }
 
-  return { render: render };
+  return {
+    render: render,
+    goPage: goPage,
+    onSearch: onSearch,
+    sortByCol: sortByCol,
+    toggleExpand: toggleExpand
+  };
 })();
 
 function renderOverview() { OverviewPage.render(); }
@@ -9873,14 +10246,33 @@ function renderOverview() { OverviewPage.render(); }
 <script>
 /**
  * profit.js — Profit Settlement Page (Ctrl+2)
- * Booking System v2.0.9
+ * Booking System v2.2.0
  * Accountant fills chargeCompany -> auto-calc profit = chargeGuest - chargeCompany
  * Only shows paid bookings (free bookings shown grayed out without input)
  * Silent save: updates DOM in-place without full page re-render
+ * Pagination: 10 per page, search, sort, expand all
  */
 var ProfitPage = (function () {
 
   var _filterFee = '';  /* '', 'free', 'paid' */
+
+  /* Pagination state */
+  var _page = 1;
+  var _search = '';
+  var _sortField = 'agent';
+  var _sortAsc = true;
+  var _expandAll = false;
+
+  /* ===== Data helper: returns {filtered, sorted, pageData} ===== */
+  function _getData() {
+    var month = State.get('workingMonth') || Utils.currentMonth();
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
+    var searched = Paginator.filterBySearch(filtered, _search);
+    var sorted = Paginator.sortBy(searched, _sortField, _sortAsc);
+    var pageData = Paginator.getPage(sorted, _page, _expandAll);
+    return { filtered: filtered, sorted: sorted, pageData: pageData };
+  }
 
   function render() {
     var container = document.getElementById('page-profit');
@@ -9890,6 +10282,9 @@ var ProfitPage = (function () {
     var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
     var feeCounts = Stats.countByFeeStatus(monthBookings);
     var feeStatsData = Stats.feeStats(monthBookings);
+
+    var data = _getData();
+    var pages = Paginator.totalPages(data.sorted, _expandAll);
 
     var html = '';
 
@@ -9917,51 +10312,103 @@ var ProfitPage = (function () {
     html += '</div>';
 
     /* Profit table */
-    var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
-    var sorted = _sortBookings(filtered);
-
     html += '<div class="card">';
-    html += '  <div class="card-title"><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg></div>利潤明細</div>';
+    html += '  <div class="card-title"><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg></div>利潤明細';
+    html += '    <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:400;margin-left:var(--sp-2);">' + data.sorted.length + ' 筆</span>';
+    html += '  </div>';
 
     /* Formula hint */
     html += '<div style="margin-bottom:var(--sp-2);color:var(--text-muted);font-size:var(--fs-xs);">';
     html += '利潤 = 向客人收 − 交公司。免費房以灰色顯示，不需填入交公司金額。';
     html += '</div>';
 
-    if (sorted.length === 0) {
+    /* Toolbar: search + expand toggle */
+    html += Paginator.renderToolbar(
+      Paginator.renderSearch(_search, 'ProfitPage.onSearch', '搜索客人姓名、代理、酒店...'),
+      Paginator.renderExpandToggle(_expandAll, 'ProfitPage.toggleExpand')
+    );
+
+    if (data.sorted.length === 0) {
       html += _emptyStateMini('暫無記錄');
     } else {
       html += '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint scrollable">';
       html += '<table class="data-table"><thead><tr>';
-      html += '<th>代理</th><th>客人</th><th>酒店</th>';
+      html += Paginator.renderTH('代理', 'agent', _sortField, _sortAsc, 'ProfitPage.sortByCol');
+      html += Paginator.renderTH('客人', 'guestName', _sortField, _sortAsc, 'ProfitPage.sortByCol');
+      html += '<th>酒店</th>';
       html += '<th style="text-align:right;width:90px;">向客人收</th>';
       html += '<th style="text-align:right;width:90px;">交公司</th>';
       html += '<th style="text-align:right;width:90px;">利潤</th>';
       html += '<th style="width:50px;">幣別</th>';
       html += '</tr></thead><tbody id="profit-table-body">';
 
-      for (var i = 0; i < sorted.length; i++) {
-        html += _profitRow(sorted[i]);
+      for (var i = 0; i < data.pageData.length; i++) {
+        html += _profitRow(data.pageData[i]);
       }
 
-      /* Summary row */
-      html += _summaryRow(sorted);
+      /* Summary row — calculated from full filtered data */
+      html += _summaryRow(data.filtered);
 
       html += '</tbody></table></div></div>';
+
+      /* Pagination nav */
+      html += '<div id="profit-paginator-nav">';
+      html += Paginator.renderNav(_page, pages, data.sorted.length, 'ProfitPage.goPage');
+      html += '</div>';
     }
     html += '</div>';
 
     container.innerHTML = html;
   }
 
-  /* ===== Sort by agent first, then checkIn ===== */
-  function _sortBookings(bookings) {
-    return bookings.slice().sort(function (a, b) {
-      var agentA = (a.agent || '').toLowerCase();
-      var agentB = (b.agent || '').toLowerCase();
-      if (agentA !== agentB) return agentA < agentB ? -1 : 1;
-      return (a.checkIn || '') < (b.checkIn || '') ? -1 : 1;
-    });
+  /* ===== Re-render body only (for pagination controls) ===== */
+  function _renderBody() {
+    var tbody = document.getElementById('profit-table-body');
+    if (!tbody) return;
+
+    var data = _getData();
+    var pages = Paginator.totalPages(data.sorted, _expandAll);
+
+    var html = '';
+    for (var i = 0; i < data.pageData.length; i++) {
+      html += _profitRow(data.pageData[i]);
+    }
+    html += _summaryRow(data.filtered);
+    tbody.innerHTML = html;
+
+    /* Update pagination nav */
+    var navContainer = document.getElementById('profit-paginator-nav');
+    if (navContainer) {
+      navContainer.innerHTML = Paginator.renderNav(_page, pages, data.sorted.length, 'ProfitPage.goPage');
+    }
+  }
+
+  function goPage(n) {
+    _page = n;
+    _renderBody();
+  }
+
+  function onSearch(term) {
+    _search = term;
+    _page = 1;
+    _renderBody();
+  }
+
+  function sortByCol(field) {
+    if (_sortField === field) {
+      _sortAsc = !_sortAsc;
+    } else {
+      _sortField = field;
+      _sortAsc = (field === 'agent' || field === 'guestName' ? true : false);
+    }
+    _page = 1;
+    _renderBody();
+  }
+
+  function toggleExpand(val) {
+    _expandAll = val;
+    _page = 1;
+    _renderBody();
   }
 
   /* ===== Row builder ===== */
@@ -10149,27 +10596,14 @@ var ProfitPage = (function () {
     }
   }
 
-  /* ===== Update summary row in-place ===== */
+  /* ===== Update summary row in-place — NOW CALCULATES FROM FULL DATA ===== */
   function _updateSummary() {
-    var tbody = document.getElementById('profit-table-body');
-    if (!tbody) return;
     var summaryRow = document.getElementById('profit-summary-row');
     if (!summaryRow) return;
 
-    /* Recalculate from all visible booking rows */
-    var dataRows = tbody.querySelectorAll('tr[data-fbkey]');
-    var totals = { chargeGuest: 0, chargeCompany: 0, profit: 0 };
-
-    for (var i = 0; i < dataRows.length; i++) {
-      var fbKey = dataRows[i].getAttribute('data-fbkey');
-      var b = Bookings.getByKey(fbKey);
-      if (!b) continue;
-      if (b.feeStatus === 'paid') {
-        totals.chargeGuest += Number(b.chargeGuest) || 0;
-        totals.chargeCompany += Number(b.chargeCompany) || 0;
-        totals.profit += (Number(b.chargeGuest) || 0) - (Number(b.chargeCompany) || 0);
-      }
-    }
+    /* Calculate from full filtered data, NOT from DOM rows */
+    var data = _getData();
+    var totals = _calcTotals(data.filtered);
 
     summaryRow.innerHTML = '<td colspan="3">合計</td>';
     summaryRow.innerHTML += '<td class="num-cell">' + Utils.formatCurrency(totals.chargeGuest, CURRENCY_DEFAULT) + '</td>';
@@ -10199,6 +10633,8 @@ var ProfitPage = (function () {
 
   function setFilter(fee) {
     _filterFee = fee;
+    _page = 1;
+    _search = '';
     render();
   }
 
@@ -10224,6 +10660,10 @@ var ProfitPage = (function () {
 
   return {
     render: render,
+    goPage: goPage,
+    onSearch: onSearch,
+    sortByCol: sortByCol,
+    toggleExpand: toggleExpand,
     updateChargeCompany: updateChargeCompany,
     updateCurrency: updateCurrency,
     setFilter: setFilter
@@ -10238,13 +10678,32 @@ function renderProfit() { ProfitPage.render(); }
 <script>
 /**
  * fees.js — Fee Collection Page (Ctrl+3)
- * Booking System v2.0.8
+ * Booking System v2.2.0
  * Accountant fills volume → auto-calc discount/remaining → auto-determine fee status → fill charge amount
  * Silent save: updates DOM in-place without full page re-render
+ * Pagination: 10 per page, search, sort, expand all
  */
 var FeesPage = (function () {
 
   var _filterFee = '';  /* '', 'free', 'paid' */
+
+  /* Pagination state */
+  var _page = 1;
+  var _search = '';
+  var _sortField = 'agent';
+  var _sortAsc = true;
+  var _expandAll = false;
+
+  /* ===== Data helper: returns {filtered, sorted, pageData} ===== */
+  function _getData() {
+    var month = State.get('workingMonth') || Utils.currentMonth();
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
+    var searched = Paginator.filterBySearch(filtered, _search);
+    var sorted = Paginator.sortBy(searched, _sortField, _sortAsc);
+    var pageData = Paginator.getPage(sorted, _page, _expandAll);
+    return { filtered: filtered, sorted: sorted, pageData: pageData };
+  }
 
   function render() {
     var container = document.getElementById('page-fees');
@@ -10254,6 +10713,9 @@ var FeesPage = (function () {
     var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
     var feeCounts = Stats.countByFeeStatus(monthBookings);
     var feeStatsData = Stats.feeStats(monthBookings);
+
+    var data = _getData();
+    var pages = Paginator.totalPages(data.sorted, _expandAll);
 
     var html = '';
 
@@ -10281,11 +10743,10 @@ var FeesPage = (function () {
     html += '</div>';
 
     /* Fee table */
-    var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
-    var sorted = _sortBookings(filtered);
-
     html += '<div class="card">';
-    html += '  <div class="card-title"><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V9H7z"/></svg></div>費用明細</div>';
+    html += '  <div class="card-title"><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V9H7z"/></svg></div>費用明細';
+    html += '    <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:400;margin-left:var(--sp-2);">' + data.sorted.length + ' 筆</span>';
+    html += '  </div>';
 
     /* Formula hint */
     html += '<div style="margin-bottom:var(--sp-2);color:var(--text-muted);font-size:var(--fs-xs);">';
@@ -10293,12 +10754,21 @@ var FeesPage = (function () {
     html += '向客人收 = (剩餘天數 × 每晚門檻 ÷ 10萬) × ' + State.getRoomFeeRate() + ' 元（自動帶入，可手動修改）。';
     html += '</div>';
 
-    if (sorted.length === 0) {
+    /* Toolbar: search + expand toggle */
+    html += Paginator.renderToolbar(
+      Paginator.renderSearch(_search, 'FeesPage.onSearch', '搜索客人姓名、代理、酒店...'),
+      Paginator.renderExpandToggle(_expandAll, 'FeesPage.toggleExpand')
+    );
+
+    if (data.sorted.length === 0) {
       html += _emptyStateMini('暫無記錄');
     } else {
       html += '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint scrollable">';
       html += '<table class="data-table"><thead><tr>';
-      html += '<th>代理</th><th>客人</th><th>酒店</th><th>入住</th>';
+      html += Paginator.renderTH('代理', 'agent', _sortField, _sortAsc, 'FeesPage.sortByCol');
+      html += Paginator.renderTH('客人', 'guestName', _sortField, _sortAsc, 'FeesPage.sortByCol');
+      html += '<th>酒店</th>';
+      html += Paginator.renderTH('入住', 'checkIn', _sortField, _sortAsc, 'FeesPage.sortByCol');
       html += '<th style="text-align:center;width:45px;">天數</th>';
       html += '<th style="text-align:right;width:50px;">每晚<br>(萬)</th>';
       html += '<th style="text-align:right;width:60px;">總門檻<br>(萬)</th>';
@@ -10310,28 +10780,73 @@ var FeesPage = (function () {
       html += '<th style="width:65px;">操作</th>';
       html += '</tr></thead><tbody id="fee-table-body">';
 
-      for (var i = 0; i < sorted.length; i++) {
-        html += _feeRow(sorted[i]);
+      for (var i = 0; i < data.pageData.length; i++) {
+        html += _feeRow(data.pageData[i]);
       }
 
-      /* Summary row */
-      html += _summaryRow(sorted);
+      /* Summary row — calculated from full filtered data */
+      html += _summaryRow(data.filtered);
 
       html += '</tbody></table></div></div>';
+
+      /* Pagination nav */
+      html += '<div id="fee-paginator-nav">';
+      html += Paginator.renderNav(_page, pages, data.sorted.length, 'FeesPage.goPage');
+      html += '</div>';
     }
     html += '</div>';
 
     container.innerHTML = html;
   }
 
-  /* ===== Sort by agent first, then checkIn ===== */
-  function _sortBookings(bookings) {
-    return bookings.slice().sort(function (a, b) {
-      var agentA = (a.agent || '').toLowerCase();
-      var agentB = (b.agent || '').toLowerCase();
-      if (agentA !== agentB) return agentA < agentB ? -1 : 1;
-      return (a.checkIn || '') < (b.checkIn || '') ? -1 : 1;
-    });
+  /* ===== Re-render body only (for pagination controls) ===== */
+  function _renderBody() {
+    var tbody = document.getElementById('fee-table-body');
+    if (!tbody) return;
+
+    var data = _getData();
+    var pages = Paginator.totalPages(data.sorted, _expandAll);
+
+    var html = '';
+    for (var i = 0; i < data.pageData.length; i++) {
+      html += _feeRow(data.pageData[i]);
+    }
+    html += _summaryRow(data.filtered);
+    tbody.innerHTML = html;
+
+    /* Update pagination nav */
+    var navContainer = document.getElementById('fee-paginator-nav');
+    if (navContainer) {
+      navContainer.innerHTML = Paginator.renderNav(_page, pages, data.sorted.length, 'FeesPage.goPage');
+    }
+  }
+
+  function goPage(n) {
+    _page = n;
+    _renderBody();
+  }
+
+  function onSearch(term) {
+    _search = term;
+    _page = 1;
+    _renderBody();
+  }
+
+  function sortByCol(field) {
+    if (_sortField === field) {
+      _sortAsc = !_sortAsc;
+    } else {
+      _sortField = field;
+      _sortAsc = (field === 'agent' || field === 'guestName' ? true : false);
+    }
+    _page = 1;
+    _renderBody();
+  }
+
+  function toggleExpand(val) {
+    _expandAll = val;
+    _page = 1;
+    _renderBody();
   }
 
   /* ===== Row builder ===== */
@@ -10419,7 +10934,6 @@ var FeesPage = (function () {
     return 0;
   }
 
-  /* ===== Auto-calc room fee: (remainingNights × threshold / 100000) × rate ===== */
   function _calcRoomFee(remainingNights, threshold) {
     if (remainingNights <= 0 || threshold <= 0) return 0;
     var rate = State.getRoomFeeRate();
@@ -10566,13 +11080,11 @@ var FeesPage = (function () {
           updateData.chargeGuest = 0;
           updateData.chargeCompany = 0;
         } else {
-          /* Auto-calc room fee for paid room */
           updateData.chargeGuest = _calcRoomFee(remaining, th);
         }
         var updated = Bookings.update(b._fbKey, updateData);
         if (updated) b = updated;
       } else if (newFeeStatus === FEE_TYPES.PAID) {
-        /* Already paid, but volume changed → recalc chargeGuest */
         var newFee = _calcRoomFee(remaining, th);
         if (newFee !== (Number(b.chargeGuest) || 0)) {
           var updated2 = Bookings.update(b._fbKey, { chargeGuest: newFee });
@@ -10627,33 +11139,14 @@ var FeesPage = (function () {
     }
   }
 
-  /* ===== Update summary row in-place ===== */
+  /* ===== Update summary row in-place — NOW CALCULATES FROM FULL DATA ===== */
   function _updateSummary() {
-    var tbody = document.getElementById('fee-table-body');
-    if (!tbody) return;
     var summaryRow = document.getElementById('fee-summary-row');
     if (!summaryRow) return;
 
-    /* Recalculate from all visible booking rows */
-    var dataRows = tbody.querySelectorAll('tr[data-fbkey]');
-    var totals = { nights: 0, discount: 0, remaining: 0, chargeGuest: 0 };
-
-    for (var i = 0; i < dataRows.length; i++) {
-      var fbKey = dataRows[i].getAttribute('data-fbkey');
-      var b = Bookings.getByKey(fbKey);
-      if (!b) continue;
-      var n = Number(b.nights) || 0;
-      var th = Number(b.threshold) || 0;
-      var vol = Number(b.volume) || 0;
-      var disc = _calcDiscount(vol, th);
-      var rem = n - disc;
-      totals.nights += n;
-      totals.discount += disc;
-      if (rem > 0) totals.remaining += rem;
-      if (b.feeStatus === 'paid') {
-        totals.chargeGuest += Number(b.chargeGuest) || 0;
-      }
-    }
+    /* Calculate from full filtered data, NOT from DOM rows */
+    var data = _getData();
+    var totals = _calcTotals(data.filtered);
 
     summaryRow.innerHTML = '<td colspan="4">合計</td>';
     summaryRow.innerHTML += '<td class="num-cell">' + totals.nights + '</td>';
@@ -10698,9 +11191,8 @@ var FeesPage = (function () {
     if (newFee === FEE_TYPES.FREE) {
       data.chargeGuest = 0;
       data.chargeCompany = 0;
-      data.feeManualOverride = true;  /* 手動設免費 → 鎖定，不被自動覆蓋 */
+      data.feeManualOverride = true;
     } else {
-      /* 手動改回收費 → 清除鎖定，恢復自動計算 */
       data.feeManualOverride = false;
       var b = Bookings.getByKey(fbKey);
       if (b) {
@@ -10728,6 +11220,8 @@ var FeesPage = (function () {
 
   function setFilter(fee) {
     _filterFee = fee;
+    _page = 1;
+    _search = '';
     render();
   }
 
@@ -10753,6 +11247,10 @@ var FeesPage = (function () {
 
   return {
     render: render,
+    goPage: goPage,
+    onSearch: onSearch,
+    sortByCol: sortByCol,
+    toggleExpand: toggleExpand,
     updateVolume: updateVolume,
     updateChargeGuest: updateChargeGuest,
     toggleFee: toggleFee,
@@ -10768,11 +11266,18 @@ function renderFees() { FeesPage.render(); }
 <script>
 /**
  * agent-performance.js — Agent Performance Page (Ctrl+4)
- * Booking System v2.0.0 (v8 spec)
- * Renders: KPI + agent × casino matrix + agent ranking + per-agent breakdown
+ * Booking System v2.2.0
+ * Renders: KPI + agent × casino matrix + agent ranking + paginated per-agent breakdown
  * Note: Agents != Employees (agents represent customers, employees operate the Bot)
  */
 var AgentPerfPage = (function () {
+
+  /* Pagination state for detail table */
+  var _page = 1;
+  var _search = '';
+  var _sortField = 'agent';
+  var _sortAsc = true;
+  var _expandAll = false;
 
   function render() {
     var container = document.getElementById('page-agent-performance');
@@ -10831,13 +11336,60 @@ var AgentPerfPage = (function () {
 
     html += '</div>';
 
-    /* Booking detail table with threshold per booking */
+    /* ===== Paginated Booking Detail Table ===== */
     html += '<div class="card" style="margin-top:var(--sp-4);">';
-    html += '  <div class="card-title"><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zm0-8v2h14V9H7z"/></svg></div>逐筆訂房明細（含洗碼門檻）</div>';
+    html += '  <div class="card-title"><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zm0-8v2h14V9H7z"/></svg></div>逐筆訂房明細（含洗碼門檻）';
+    html += '    <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:400;margin-left:var(--sp-2);">' + monthBookings.length + ' 筆</span>';
+    html += '  </div>';
+
+    /* Formula hint */
+    html += '<div style="margin-bottom:var(--sp-2);color:var(--text-muted);font-size:var(--fs-xs);">';
+    html += '折抵天數 = 客戶轉碼 ÷ 每晚門檻（無條件退位）。轉碼金額請至「費用收取」頁面填寫。';
+    html += '</div>';
+
+    /* Toolbar */
+    html += Paginator.renderToolbar(
+      Paginator.renderSearch(_search, 'AgentPerfPage.onSearch', '搜索客人姓名、代理、酒店...'),
+      Paginator.renderExpandToggle(_expandAll, 'AgentPerfPage.toggleExpand')
+    );
+
     html += _detailTable(monthBookings);
     html += '</div>';
 
     container.innerHTML = html;
+  }
+
+  /* ===== Re-render helpers ===== */
+  function _rerender() {
+    render();
+  }
+
+  function goPage(n) {
+    _page = n;
+    _rerender();
+  }
+
+  function onSearch(term) {
+    _search = term;
+    _page = 1;
+    _rerender();
+  }
+
+  function sortByCol(field) {
+    if (_sortField === field) {
+      _sortAsc = !_sortAsc;
+    } else {
+      _sortField = field;
+      _sortAsc = (field === 'agent' || field === 'guestName' ? true : false);
+    }
+    _page = 1;
+    _rerender();
+  }
+
+  function toggleExpand(val) {
+    _expandAll = val;
+    _page = 1;
+    _rerender();
   }
 
   function _agentMatrixTable(bookings) {
@@ -10848,7 +11400,6 @@ var AgentPerfPage = (function () {
     }
     agents.sort(function (x, y) { return y.total - x.total; });
 
-    /* Collect all casinos from data + preset */
     var casinos = CASINO_ORDER.slice();
     for (var ag in matrix) {
       for (var ck in matrix[ag]) {
@@ -10877,7 +11428,6 @@ var AgentPerfPage = (function () {
       grandTotal += (row._total || 0);
     }
 
-    /* Totals row */
     html += '<tr style="background:var(--bg-base);font-weight:700;"><td>合計</td>';
     for (var ck2 = 0; ck2 < casinos.length; ck2++) {
       var colTotal = 0;
@@ -10940,20 +11490,22 @@ var AgentPerfPage = (function () {
   function _detailTable(bookings) {
     if (!bookings || bookings.length === 0) return _emptyStateMini('暫無數據');
 
-    /* Sort by agent, then checkIn */
-    var sorted = bookings.slice().sort(function (a, b) {
-      var agentA = (a.agent || '').toLowerCase();
-      var agentB = (b.agent || '').toLowerCase();
-      if (agentA !== agentB) return agentA < agentB ? -1 : 1;
-      return (a.checkIn || '') < (b.checkIn || '') ? -1 : 1;
-    });
+    /* Search → Sort → Page */
+    var searched = Paginator.filterBySearch(bookings, _search);
+    var sorted = Paginator.sortBy(searched, _sortField, _sortAsc);
+    var pageData = Paginator.getPage(sorted, _page, _expandAll);
+    var pages = Paginator.totalPages(sorted, _expandAll);
 
-    var html = '<div style="margin-bottom:var(--sp-2);color:var(--text-muted);font-size:var(--fs-xs);">';
-    html += '折抵天數 = 客戶轉碼 ÷ 每晚門檻（無條件退位）。轉碼金額請至「費用收取」頁面填寫。';
-    html += '</div>';
-    html += '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint scrollable">';
+    if (sorted.length === 0) {
+      return '<div style="padding:var(--sp-4);text-align:center;color:var(--text-muted);font-size:var(--fs-sm);">無匹配結果</div>';
+    }
+
+    var html = '<div class="data-table-wrap"><div class="data-table-scroll scroll-hint scrollable">';
     html += '<table class="data-table"><thead><tr>';
-    html += '<th>代理</th><th>客人</th><th>酒店</th><th>入住</th>';
+    html += Paginator.renderTH('代理', 'agent', _sortField, _sortAsc, 'AgentPerfPage.sortByCol');
+    html += Paginator.renderTH('客人', 'guestName', _sortField, _sortAsc, 'AgentPerfPage.sortByCol');
+    html += '<th>酒店</th>';
+    html += Paginator.renderTH('入住', 'checkIn', _sortField, _sortAsc, 'AgentPerfPage.sortByCol');
     html += '<th style="text-align:center;width:60px;">入住天數</th>';
     html += '<th style="text-align:right;width:60px;">每晚(萬)</th>';
     html += '<th style="text-align:right;width:70px;">總門檻(萬)</th>';
@@ -10963,8 +11515,8 @@ var AgentPerfPage = (function () {
     html += '<th>狀態</th>';
     html += '</tr></thead><tbody>';
 
-    for (var i = 0; i < sorted.length; i++) {
-      var b = sorted[i];
+    for (var i = 0; i < pageData.length; i++) {
+      var b = pageData[i];
       var th = Number(b.threshold) || 0;
       var n = Number(b.nights) || 0;
       var totalTh = th * n;
@@ -10974,7 +11526,6 @@ var AgentPerfPage = (function () {
       var vol = Number(b.volume) || 0;
       var volWan = vol > 0 ? Math.round(vol / 10000) : 0;
 
-      /* Discount days = floor(volume / threshold) */
       var discountDays = 0;
       if (vol > 0 && th > 0) {
         discountDays = Math.floor(vol / th);
@@ -11011,6 +11562,10 @@ var AgentPerfPage = (function () {
     }
 
     html += '</tbody></table></div></div>';
+
+    /* Pagination nav */
+    html += Paginator.renderNav(_page, pages, sorted.length, 'AgentPerfPage.goPage');
+
     return html;
   }
 
@@ -11044,7 +11599,13 @@ var AgentPerfPage = (function () {
     return '<div style="padding:var(--sp-6);text-align:center;color:var(--text-muted);font-size:var(--fs-sm);">' + Utils.escapeHtml(text) + '</div>';
   }
 
-  return { render: render };
+  return {
+    render: render,
+    goPage: goPage,
+    onSearch: onSearch,
+    sortByCol: sortByCol,
+    toggleExpand: toggleExpand
+  };
 })();
 
 function renderAgentPerformance() { AgentPerfPage.render(); }
@@ -12659,7 +13220,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783826448732";
+window.BUILD_VERSION = "1783860979796";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
