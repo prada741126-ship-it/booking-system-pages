@@ -9810,7 +9810,7 @@ var Paginator = (function () {
     var escFn = onSearchFn || '';
     var html = '<div class="search-box" style="margin-bottom:var(--sp-3);">';
     html += '<svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
-    html += '<input type="text" class="form-control" id="paginator-search-input" placeholder="' + Utils.escapeHtml(ph) + '" value="' + Utils.escapeHtml(term || '') + '" oninput="' + escFn + '(this.value)">';
+    html += '<input type="text" class="form-control" id="paginator-search-input" placeholder="' + Utils.escapeHtml(ph) + '" value="' + Utils.escapeHtml(term || '') + '" oninput="var el=this;clearTimeout(el._t);el._t=setTimeout(function(){' + escFn + '(el.value);},400);" oncompositionend="var el=this;clearTimeout(el._t);setTimeout(function(){' + escFn + '(el.value);},0);">';
     if (term) {
       html += '<span class="search-clear" style="display:flex;cursor:pointer;" onclick="' + escFn + '(\'\')"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></span>';
     }
@@ -13220,7 +13220,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1783860979796";
+window.BUILD_VERSION = "1783861903929";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
