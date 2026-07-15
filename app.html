@@ -5157,8 +5157,8 @@ var App = (function () {
     try {
       var hc = State.get('hotelConfig');
       if (!hc || !hc.casinos || hc.casinos.length === 0) {
-        console.log('[App] Hotel config empty, loading presets...');
-        Hotels.loadPresets();
+        console.log('[App] Hotel config empty, loading presets (skipSync)...');
+        Hotels.loadPresets(true); /* skipSync=true — don't overwrite Firebase */
       } else {
         console.log('[App] Hotel config loaded: ' + hc.casinos.length + ' casinos');
       }
@@ -5166,7 +5166,7 @@ var App = (function () {
       console.error('[App] initHotelConfig error:', e);
       /* Last resort: try loading presets directly */
       try {
-        Hotels.loadPresets();
+        Hotels.loadPresets(true); /* skipSync=true */
         console.log('[App] Hotel presets loaded after error recovery');
       } catch (e2) {
         console.error('[App] Hotel presets load also failed:', e2);
@@ -6870,8 +6870,9 @@ var Hotels = {
 
   /**
    * Load preset configuration (called by App.initHotelConfig)
+   * @param {boolean} skipSync - if true, don't push to Firebase (used during init)
    */
-  loadPresets: function () {
+  loadPresets: function (skipSync) {
     var config = {
       version: PRESET_VERSION,
       _updatedAt: Date.now(),
@@ -6879,13 +6880,15 @@ var Hotels = {
     };
     State.set('hotelConfig', config);
     Store.saveHotelConfig(config);
-    try {
-      syncHCToFirebase(config);
-    } catch (e) {
-      console.error('[Hotels] syncHCToFirebase error (non-critical):', e);
+    if (!skipSync) {
+      try {
+        syncHCToFirebase(config);
+      } catch (e) {
+        console.error('[Hotels] syncHCToFirebase error (non-critical):', e);
+      }
     }
     Events.emit(EVENTS.HC_LOADED, config);
-    console.log('[Hotels] Presets loaded:', config.casinos.length, 'casinos');
+    console.log('[Hotels] Presets loaded:', config.casinos.length, 'casinos', skipSync ? '(skipSync)' : '');
     return config;
   },
 
@@ -13559,7 +13562,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1784134964588";
+window.BUILD_VERSION = "1784136787272";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
