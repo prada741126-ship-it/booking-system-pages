@@ -3766,7 +3766,6 @@ var BOT_COMMANDS = [
   { command: 'confirmno',  label: '/確認號',   desc: '填入確認編號',      adminOnly: false },
   { command: 'modify',     label: '/修改',     desc: '修改訂房資料',      adminOnly: false },
   { command: 'cancel',     label: '/取消',     desc: '取消訂房',          adminOnly: false },
-  { command: 'work',       label: '/開工',     desc: '標記客人開工狀態',   adminOnly: false },
   { command: 'query',      label: '/查詢',     desc: '查詢訂房記錄',      adminOnly: false }
 ];
 
@@ -10149,7 +10148,6 @@ var OverviewPage = (function () {
       html += '<th style="text-align:center;">入住天數</th>';
       html += Paginator.renderTH('代理', 'agent', _sortField, _sortAsc, 'OverviewPage.sortByCol');
       html += '<th>費用</th><th>狀態</th>';
-      html += '<th style="text-align:center;">開工</th>';
       html += Paginator.renderTH('創建日期', '_createdAt', _sortField, _sortAsc, 'OverviewPage.sortByCol');
       html += '<th>登錄人</th>';
       html += '</tr></thead><tbody>';
@@ -10313,7 +10311,6 @@ var OverviewPage = (function () {
     html += '<td>' + Utils.escapeHtml(b.agent || '-') + '</td>';
     html += '<td><span class="fee-badge ' + (b.feeStatus || 'free') + '">' + (FEE_TYPE_LABELS[b.feeStatus] || '免費') + '</span></td>';
     html += '<td>' + _statusBadge(b.status) + '</td>';
-    html += '<td style="text-align:center;">' + _workStatusIcon(b.workStatus || WORK_STATUS.NOT_STARTED) + '</td>';
     html += '<td style="font-size:var(--fs-sm);white-space:nowrap;">' + _fmtTimestamp(b._createdAt) + '</td>';
     html += '<td style="font-size:var(--fs-sm);">' + Utils.escapeHtml(b.createdBy || b.employee || '-') + '</td>';
     html += '</tr>';
@@ -10330,26 +10327,6 @@ var OverviewPage = (function () {
 
   function _statusBadge(status) {
     return '<span class="status-badge status-' + status + '">' + Utils.escapeHtml(BOOKING_STATUS_LABELS[status] || status) + '</span>';
-  }
-
-  /* Work status icon — circular badge with SVG, tooltip on hover */
-  function _workStatusIcon(workStatus) {
-    var ws = workStatus || WORK_STATUS.NOT_STARTED;
-    var label = WORK_STATUS_LABELS[ws] || WORK_STATUS_LABELS[WORK_STATUS.NOT_STARTED];
-
-    if (ws === WORK_STATUS.WORKING) {
-      /* Green circle with play icon */
-      return '<span title="' + Utils.escapeHtml(label) + '" style="display:inline-flex;align-items:center;justify-content:center;' +
-             'width:26px;height:26px;border-radius:50%;background:#16a34a;color:#fff;' +
-             'box-shadow:0 1px 3px rgba(22,163,74,0.3);">' +
-             '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>';
-    } else {
-      /* Gray circle with pause icon */
-      return '<span title="' + Utils.escapeHtml(label) + '" style="display:inline-flex;align-items:center;justify-content:center;' +
-             'width:26px;height:26px;border-radius:50%;background:#e2e8f0;color:#94a3b8;' +
-             'box-shadow:0 1px 2px rgba(0,0,0,0.05);">' +
-             '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></span>';
-    }
   }
 
   function _emptyStateMini(text) {
@@ -13200,15 +13177,6 @@ function viewBookingDetail(fbKey) {
 
   body += '</div>';
 
-  /* Work status toggle section — button style, not dropdown */
-  body += '<div style="margin-top:var(--sp-4);padding:var(--sp-3);background:var(--bg-input);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between;">';
-  body += '  <div style="display:flex;align-items:center;gap:var(--sp-2);">';
-  body += '    <span style="font-size:var(--fs-sm);color:var(--text-secondary);font-weight:500;">開工狀態</span>';
-  body += _workStatusBadge(b.workStatus || WORK_STATUS.NOT_STARTED);
-  body += '  </div>';
-  body += _workStatusButton(b._fbKey, b.workStatus || WORK_STATUS.NOT_STARTED);
-  body += '</div>';
-
   if (b.remark) {
     body += '<div class="form-group" style="margin-top:var(--sp-4);"><label>' + Utils.escapeHtml(TERMS.remark) + '</label>';
     body += '<div style="padding:var(--sp-3);background:var(--bg-input);border-radius:var(--radius-md);">' + Utils.escapeHtml(b.remark) + '</div></div>';
@@ -13274,67 +13242,6 @@ function _transferLabel(val) {
     if (TRANSFER_OPTIONS[i].value === val) return TRANSFER_OPTIONS[i].label;
   }
   return val || '\u7121';
-}
-
-/* ----- work status helpers ----- */
-
-/* SVG icon badge for work status — circle background + icon */
-function _workStatusBadge(workStatus) {
-  var ws = workStatus || WORK_STATUS.NOT_STARTED;
-  var color = WORK_STATUS_COLORS[ws] || UI_COLORS.textMuted;
-  var label = WORK_STATUS_LABELS[ws] || WORK_STATUS_LABELS[WORK_STATUS.NOT_STARTED];
-
-  if (ws === WORK_STATUS.WORKING) {
-    /* Green circle with play icon — 開工中 */
-    return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-full);' +
-           'background:' + color + '15;color:' + color + ';font-size:var(--fs-xs);font-weight:600;">' +
-           '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
-           Utils.escapeHtml(label) + '</span>';
-  } else {
-    /* Gray circle with pause icon — 未開工 */
-    return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-full);' +
-           'background:' + color + '15;color:' + color + ';font-size:var(--fs-xs);font-weight:500;">' +
-           '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>' +
-           Utils.escapeHtml(label) + '</span>';
-  }
-}
-
-/* Toggle button — shows the action you can perform */
-function _workStatusButton(fbKey, workStatus) {
-  var ws = workStatus || WORK_STATUS.NOT_STARTED;
-  if (ws === WORK_STATUS.WORKING) {
-    /* Currently working → button to mark as not started */
-    return '<button class="btn btn-secondary btn-sm" onclick="toggleWorkStatus(\'' + fbKey + '\')" ' +
-           'style="display:inline-flex;align-items:center;gap:4px;">' +
-           '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>' +
-           '標記未開工</button>';
-  } else {
-    /* Not started → button to mark as working */
-    return '<button class="btn btn-success btn-sm" onclick="toggleWorkStatus(\'' + fbKey + '\')" ' +
-           'style="display:inline-flex;align-items:center;gap:4px;background:#16a34a;border-color:#16a34a;color:#fff;">' +
-           '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' +
-           '標記開工</button>';
-  }
-}
-
-/* Global toggle function — flips work status and refreshes modal */
-function toggleWorkStatus(fbKey) {
-  var b = Bookings.getByKey(fbKey);
-  if (!b) { Toast.error('\u627e\u4e0d\u5230\u8a02\u623f\u8a18\u9304'); return; }
-
-  var current = b.workStatus || WORK_STATUS.NOT_STARTED;
-  var next = (current === WORK_STATUS.WORKING) ? WORK_STATUS.NOT_STARTED : WORK_STATUS.WORKING;
-
-  Bookings.setWorkStatus(fbKey, next);
-
-  var label = WORK_STATUS_LABELS[next];
-  Toast.success('\u5df2\u6a19\u8a18\u70ba\u300c' + label + '\u300d');
-
-  /* Re-open detail modal to reflect change */
-  Modal.close();
-  setTimeout(function () { viewBookingDetail(fbKey); }, 100);
-
-  Events.emit(EVENTS.UI_RENDER);
 }
 
 /* ============================================================
@@ -13652,7 +13559,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1784134032402";
+window.BUILD_VERSION = "1784134964588";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
