@@ -6304,19 +6304,9 @@ function _watchBookings() {
       var alive = Merger.filterAlive(merged);
       var changed = _hasChanged(local, alive);
       if (changed) {
-        /* DEBUG: Log watcher overwrite details */
-        console.log('[Watchers._watchBookings] State overwrite — local:', (local||[]).length, 'items, remote:', (remote||[]).length, 'items, merged alive:', alive.length, 'items');
-        /* Log specific booking details for known test cases */
-        for (var di = 0; di < alive.length; di++) {
-          var db = alive[di];
-          if (db.guestName && (db.guestName.indexOf('林') !== -1 || db.guestName.indexOf('洪') !== -1)) {
-            console.log('[Watchers._watchBookings] After merge:', db.guestName, '| checkIn:', db.checkIn, '| checkOut:', db.checkOut, '| nights:', db.nights, '| _updatedAt:', db._updatedAt);
-          }
-        }
         State.set('bookings', alive);
         Store.saveBookings(alive);
         Events.emit(EVENTS.BOOKINGS_SYNCED, alive);
-        console.log('[Watchers] Bookings synced:', alive.length, 'items');
       }
     } catch (e) {
       console.error('[Watchers] Bookings watcher error:', e);
@@ -7406,19 +7396,11 @@ var Bookings = {
             return list;
           }
 
-          /* Capture old values BEFORE mutation (for debug logging) */
-          var oldCheckIn = booking.checkIn;
-          var oldCheckOut = booking.checkOut;
-          var oldNights = booking.nights;
-
           /* Merge data into existing */
           for (var key in data) {
             if (data.hasOwnProperty(key) && key.charAt(0) !== '_') {
               /* Respect canEditDates for date fields */
-              if ((key === 'checkIn' || key === 'checkOut') && !rules.canEditDates) {
-                console.warn('[Bookings.update] SKIPPING date change: ' + key + ' (canEditDates=' + rules.canEditDates + ')');
-                continue;
-              }
+              if ((key === 'checkIn' || key === 'checkOut') && !rules.canEditDates) continue;
               booking[key] = data[key];
             }
           }
@@ -7428,16 +7410,15 @@ var Bookings = {
           booking.month = Utils.getMonthStr(booking.checkIn) || booking.month;
           booking.profit = Bookings.calcProfit(booking);
           booking._updatedAt = Date.now();
-          updated = booking;
 
-          /* DEBUG: Log date update */
-          console.log('[Bookings.update] Date change for', fbKey,
-            '| checkIn:', oldCheckIn + '→' + booking.checkIn,
-            '| checkOut:', oldCheckOut + '→' + booking.checkOut,
-            '| nights:', oldNights + '→' + booking.nights,
-            '| _updatedAt:', booking._updatedAt,
-            '| status:', booking.status,
-            '| canEditDates:', rules.canEditDates);
+          /* Sync date in guestName if it embeds a date range
+           * (e.g. Bot-created "洪秉豐 07/20-07/22 映星匯雙床（禁）") */
+          if (booking.guestName && /\s+\d{2}\/\d{2}-\d{2}\/\d{2}\b/.test(booking.guestName)) {
+            var newRange = Utils.formatDateDisplay(booking.checkIn) + '-' + Utils.formatDateDisplay(booking.checkOut);
+            booking.guestName = booking.guestName.replace(/\s+\d{2}\/\d{2}-\d{2}\/\d{2}\b/, ' ' + newRange);
+          }
+
+          updated = booking;
           break;
         }
       }
@@ -10334,17 +10315,16 @@ var OverviewPage = (function () {
   }
 
   function _recentRow(b) {
-    /* DEBUG: Log rendered booking */
-    console.log('[Overview._recentRow]', b.guestName,
-      '| checkIn:', b.checkIn,
-      '| checkOut:', b.checkOut,
-      '| nights:', b.nights,
-      '| _fbKey:', b._fbKey,
-      '| _updatedAt:', b._updatedAt,
-      '| status:', b.status);
+
+    /* Fix: if guestName embeds a date range, always use actual checkIn/checkOut */
+    var displayName = b.guestName || '-';
+    if (/\s+\d{2}\/\d{2}-\d{2}\/\d{2}\b/.test(displayName)) {
+      var actualRange = Utils.formatDateDisplay(b.checkIn) + '-' + Utils.formatDateDisplay(b.checkOut);
+      displayName = displayName.replace(/\s+\d{2}\/\d{2}-\d{2}\/\d{2}\b/, ' ' + actualRange);
+    }
 
     var html = '<tr style="cursor:pointer;" onclick="viewBookingDetail(\'' + b._fbKey + '\')">';
-    html += '<td style="font-weight:600;">' + Utils.escapeHtml(b.guestName || '-') + '</td>';
+    html += '<td style="font-weight:600;">' + Utils.escapeHtml(displayName) + '</td>';
     html += '<td>' + Utils.escapeHtml(b.casino || '-') + '</td>';
     html += '<td style="font-size:var(--fs-sm);">' + Utils.formatDateDisplay(b.checkIn) + '</td>';
     html += '<td style="font-size:var(--fs-sm);">' + Utils.formatDateDisplay(b.checkOut) + '</td>';
@@ -13131,12 +13111,6 @@ function saveBookingForm() {
   }
 
   if (_editingBookingKey) {
-    /* DEBUG: Log save data */
-    console.log('[saveBookingForm] Updating', _editingBookingKey,
-      '| checkIn:', data.checkIn,
-      '| checkOut:', data.checkOut,
-      '| guestName:', data.guestName);
-
     Bookings.update(_editingBookingKey, data);
     Toast.success('\u8a02\u623f\u5df2\u66f4\u65b0');
   } else {
@@ -13606,7 +13580,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1784712650731";
+window.BUILD_VERSION = "1784715027525";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
