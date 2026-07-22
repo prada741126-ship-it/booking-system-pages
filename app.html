@@ -13122,8 +13122,8 @@ function editBooking(fbKey) {
     return;
   }
 
-  _editingBookingKey = fbKey;
   openBookingModal();
+  _editingBookingKey = fbKey;  /* MUST be after openBookingModal() — it resets key to null */
 
   /* Fill form with existing data */
   setTimeout(function () {
@@ -13563,7 +13563,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1784700788617";
+window.BUILD_VERSION = "1784701862870";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
