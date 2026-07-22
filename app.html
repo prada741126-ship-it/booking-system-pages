@@ -6300,6 +6300,15 @@ function _watchBookings() {
       var alive = Merger.filterAlive(merged);
       var changed = _hasChanged(local, alive);
       if (changed) {
+        /* DEBUG: Log watcher overwrite details */
+        console.log('[Watchers._watchBookings] State overwrite — local:', (local||[]).length, 'items, remote:', (remote||[]).length, 'items, merged alive:', alive.length, 'items');
+        /* Log specific booking details for known test cases */
+        for (var di = 0; di < alive.length; di++) {
+          var db = alive[di];
+          if (db.guestName && (db.guestName.indexOf('林') !== -1 || db.guestName.indexOf('洪') !== -1)) {
+            console.log('[Watchers._watchBookings] After merge:', db.guestName, '| checkIn:', db.checkIn, '| checkOut:', db.checkOut, '| nights:', db.nights, '| _updatedAt:', db._updatedAt);
+          }
+        }
         State.set('bookings', alive);
         Store.saveBookings(alive);
         Events.emit(EVENTS.BOOKINGS_SYNCED, alive);
@@ -7398,6 +7407,7 @@ var Bookings = {
             if (data.hasOwnProperty(key) && key.charAt(0) !== '_') {
               /* Respect canEditDates for date fields */
               if ((key === 'checkIn' || key === 'checkOut') && !rules.canEditDates) {
+                console.warn('[Bookings.update] SKIPPING date change: ' + key + ' (canEditDates=' + rules.canEditDates + ')');
                 continue;
               }
               booking[key] = data[key];
@@ -7405,11 +7415,23 @@ var Bookings = {
           }
 
           /* Recalculate derived fields */
+          var oldCheckIn = booking.checkIn;
+          var oldCheckOut = booking.checkOut;
+          var oldNights = booking.nights;
           booking.nights = Utils.calcNights(booking.checkIn, booking.checkOut);
           booking.month = Utils.getMonthStr(booking.checkIn) || booking.month;
           booking.profit = Bookings.calcProfit(booking);
           booking._updatedAt = Date.now();
           updated = booking;
+
+          /* DEBUG: Log date update */
+          console.log('[Bookings.update] Date change for', fbKey,
+            '| checkIn:', oldCheckIn + '→' + booking.checkIn,
+            '| checkOut:', oldCheckOut + '→' + booking.checkOut,
+            '| nights:', oldNights + '→' + booking.nights,
+            '| _updatedAt:', booking._updatedAt,
+            '| status:', booking.status,
+            '| canEditDates:', rules.canEditDates);
           break;
         }
       }
@@ -10306,6 +10328,15 @@ var OverviewPage = (function () {
   }
 
   function _recentRow(b) {
+    /* DEBUG: Log rendered booking */
+    console.log('[Overview._recentRow]', b.guestName,
+      '| checkIn:', b.checkIn,
+      '| checkOut:', b.checkOut,
+      '| nights:', b.nights,
+      '| _fbKey:', b._fbKey,
+      '| _updatedAt:', b._updatedAt,
+      '| status:', b.status);
+
     var html = '<tr style="cursor:pointer;" onclick="viewBookingDetail(\'' + b._fbKey + '\')">';
     html += '<td style="font-weight:600;">' + Utils.escapeHtml(b.guestName || '-') + '</td>';
     html += '<td>' + Utils.escapeHtml(b.casino || '-') + '</td>';
@@ -13094,6 +13125,12 @@ function saveBookingForm() {
   }
 
   if (_editingBookingKey) {
+    /* DEBUG: Log save data */
+    console.log('[saveBookingForm] Updating', _editingBookingKey,
+      '| checkIn:', data.checkIn,
+      '| checkOut:', data.checkOut,
+      '| guestName:', data.guestName);
+
     Bookings.update(_editingBookingKey, data);
     Toast.success('\u8a02\u623f\u5df2\u66f4\u65b0');
   } else {
@@ -13563,7 +13600,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1784701862870";
+window.BUILD_VERSION = "1784712213032";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
