@@ -8575,6 +8575,8 @@ var Filters = {
       /* Dimension filters */
       /* Month filter: cross-month overlap (v2.1.4) */
       if (criteria.month && !Filters.overlapsMonth(b.checkIn, b.checkOut, b.month, criteria.month)) return false;
+      /* Check-out month filter: exact match on checkOut month (v2.3.1) */
+      if (criteria.checkOutMonth && (!b.checkOut || b.checkOut.slice(0, 7) !== criteria.checkOutMonth)) return false;
       if (criteria.casino && b.casino !== criteria.casino) return false;
       if (criteria.hotel && b.hotel !== criteria.hotel) return false;
       if (criteria.roomType && b.roomType !== criteria.roomType) return false;
@@ -10402,7 +10404,7 @@ var ProfitPage = (function () {
   /* ===== Data helper: returns {filtered, sorted, pageData} ===== */
   function _getData() {
     var month = State.get('workingMonth') || Utils.currentMonth();
-    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { checkOutMonth: month });
     var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
     /* Pending settlement filter: only checked-out */
     if (_filterPending) {
@@ -10419,7 +10421,7 @@ var ProfitPage = (function () {
     if (!container) return;
 
     var month = State.get('workingMonth') || Utils.currentMonth();
-    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { checkOutMonth: month });
     var feeCounts = Stats.countByFeeStatus(monthBookings);
     var feeStatsData = Stats.feeStats(monthBookings);
 
@@ -10810,7 +10812,7 @@ var ProfitPage = (function () {
     var kpiGrid = document.getElementById('profit-kpi-grid');
     if (!kpiGrid) return;
     var month = State.get('workingMonth') || Utils.currentMonth();
-    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { checkOutMonth: month });
     var feeCounts = Stats.countByFeeStatus(monthBookings);
     var feeStatsData = Stats.feeStats(monthBookings);
     kpiGrid.innerHTML = _buildKPIs(monthBookings, feeCounts, feeStatsData);
@@ -10968,7 +10970,7 @@ var FeesPage = (function () {
   /* ===== Data helper: returns {filtered, sorted, pageData} ===== */
   function _getData() {
     var month = State.get('workingMonth') || Utils.currentMonth();
-    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { checkOutMonth: month });
     var filtered = _filterFee ? monthBookings.filter(function (b) { return b.feeStatus === _filterFee; }) : monthBookings;
     var searched = Paginator.filterBySearch(filtered, _search);
     var sorted = Paginator.sortBy(searched, _sortField, _sortAsc);
@@ -10981,7 +10983,7 @@ var FeesPage = (function () {
     if (!container) return;
 
     var month = State.get('workingMonth') || Utils.currentMonth();
-    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { checkOutMonth: month });
     var feeCounts = Stats.countByFeeStatus(monthBookings);
     var feeStatsData = Stats.feeStats(monthBookings);
 
@@ -11436,7 +11438,7 @@ var FeesPage = (function () {
     var kpiGrid = document.getElementById('fee-kpi-grid');
     if (!kpiGrid) return;
     var month = State.get('workingMonth') || Utils.currentMonth();
-    var monthBookings = Filters.filterBookings(Bookings.getAll(), { month: month });
+    var monthBookings = Filters.filterBookings(Bookings.getAll(), { checkOutMonth: month });
     var feeCounts = Stats.countByFeeStatus(monthBookings);
     var feeStatsData = Stats.feeStats(monthBookings);
     kpiGrid.innerHTML = _buildKPIs(monthBookings, feeCounts, feeStatsData);
@@ -13586,7 +13588,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1784715303868";
+window.BUILD_VERSION = "1785215556931";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
