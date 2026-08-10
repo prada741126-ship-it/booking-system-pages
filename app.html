@@ -4242,11 +4242,12 @@ var Store = (function () {
     };
   }
 
-  /* ===== Clear all (except agent list per v13 pattern) ===== */
+  /* ===== Clear all (preserve agentList, employeeList & hotelConfig) =====
+     hotelConfig is configuration data, not transactional data — clearing it
+     causes thresholds to reset to defaults on next load */
   function clearAll(keepAgentList) {
     var keysToClear = [
       STORAGE_KEYS.BOOKINGS,
-      STORAGE_KEYS.HOTEL_CONFIG,
       STORAGE_KEYS.EMPLOYEE_LIST,
       STORAGE_KEYS.ARCHIVES,
       STORAGE_KEYS.DRAFT,
@@ -5562,12 +5563,28 @@ var Merger = {
 
   /**
    * Merge hotel config (single object, not array)
-   * Remote wins if _updatedAt is newer
+   * Remote wins if _updatedAt is newer AND has valid casinos
+   * Safety: never let an empty remote overwrite a valid local config
    */
   mergeHotelConfig: function (local, remote) {
     if (!local && !remote) return null;
     if (!local) return remote;
     if (!remote) return local;
+
+    /* Safety: if remote has no casinos, keep local (don't wipe config) */
+    var remoteHasCasinos = remote.casinos && remote.casinos.length > 0;
+    var localHasCasinos = local.casinos && local.casinos.length > 0;
+
+    if (!remoteHasCasinos && localHasCasinos) {
+      console.warn('[Merger] Remote HC has no casinos, keeping local config');
+      return local;
+    }
+    if (remoteHasCasinos && !localHasCasinos) {
+      return remote;
+    }
+    if (!remoteHasCasinos && !localHasCasinos) {
+      return local;
+    }
 
     var lTs = (local._updatedAt || 0);
     var rTs = (remote._updatedAt || 0);
@@ -5838,6 +5855,13 @@ function removeBookingFromFirebase(fbKey, callback) {
 /* ===== CRUD: Hotel Config (single object) ===== */
 
 function syncHCToFirebase(config, callback) {
+  /* Safety: never upload empty/null hotel config to Firebase —
+     this would wipe out custom thresholds on all synced devices */
+  if (!config || !config.casinos || config.casinos.length === 0) {
+    console.warn('[Firebase] syncHCToFirebase: config empty, skipping upload');
+    if (callback) callback(null);
+    return;
+  }
   if (!_db) {
     enqueueUpload({ type: 'hotelConfig', action: 'set', data: config });
     if (callback) callback({ error: 'not_ready' });
@@ -6020,7 +6044,6 @@ function clearFirebaseData(callback) {
       }
       var paths = [
         FB_PATH.BOOKINGS,
-        FB_PATH.HOTEL_CONFIG,
         FB_PATH.ARCHIVES,
         FB_PATH.CLOSED_MONTHS,
         FB_PATH.SETTINGS,
@@ -6172,9 +6195,12 @@ var Uploader = (function () {
       { path: FB_PATH.ARCHIVES, data: State.get('archives'), type: 'archive' }
     ];
 
-    /* Object-based paths (direct set) */
+    /* Object-based paths (direct set)
+       NOTE: hotelConfig is EXCLUDED from bulk upload — it is configuration data
+       that should only be synced via explicit user actions (add/edit/delete/reset).
+       Including it here causes fresh clients to overwrite Firebase with default
+       presets, wiping out custom thresholds set on other devices. */
     var objectPaths = [
-      { path: FB_PATH.HOTEL_CONFIG, data: State.get('hotelConfig'), syncFn: syncHCToFirebase },
       { path: FB_PATH.CLOSED_MONTHS, data: State.get('closedMonths'), syncFn: syncClosedMonthsToFirebase },
       { path: FB_PATH.SETTINGS, data: State.get('settings'), syncFn: syncSettingsToFirebase }
     ];
@@ -12433,11 +12459,13 @@ var HotelConfigPage = (function () {
     try {
       var hc = Hotels.getAll();
 
-      /* Auto-load presets if config is empty */
+      /* Auto-load presets if config is empty (skipSync=true — never push
+         default presets to Firebase, which would overwrite custom thresholds
+         set on other devices) */
       if (!hc || !hc.casinos || hc.casinos.length === 0) {
-        console.log('[HotelConfigPage] Config empty, auto-loading presets...');
+        console.log('[HotelConfigPage] Config empty, auto-loading presets (skipSync)...');
         try {
-          Hotels.loadPresets();
+          Hotels.loadPresets(true); /* skipSync=true */
           hc = Hotels.getAll();
         } catch (e) {
           console.error('[HotelConfigPage] Auto-load presets failed:', e);
@@ -13588,7 +13616,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1785215556931";
+window.BUILD_VERSION = "1786340435662";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
