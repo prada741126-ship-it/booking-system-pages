@@ -5174,15 +5174,33 @@ var App = (function () {
   function initHotelConfig() {
     try {
       var hc = State.get('hotelConfig');
-      if (!hc || !hc.casinos || hc.casinos.length === 0) {
-        console.log('[App] Hotel config empty, loading presets (skipSync)...');
-        Hotels.loadPresets(true); /* skipSync=true — don't overwrite Firebase */
-      } else {
+      var hasRealConfig = hc && hc.casinos && hc.casinos.length > 0 && hc._updatedAt > 0;
+      if (hasRealConfig) {
         console.log('[App] Hotel config loaded: ' + hc.casinos.length + ' casinos');
+        return;
       }
+
+      /* Local is empty or only a preset placeholder (ts=0):
+         ask Firebase first. Presets are the last resort and never overwrite cloud. */
+      console.log('[App] Hotel config missing/placeholder, reading from Firebase...');
+      readHCOnce(function (remote) {
+        try {
+          if (remote && remote.casinos && remote.casinos.length > 0) {
+            State.set('hotelConfig', remote);
+            Store.saveHotelConfig(remote);
+            Events.emit(EVENTS.HC_LOADED, remote);
+            console.log('[App] Hotel config loaded from Firebase: ' + remote.casinos.length + ' casinos');
+          } else {
+            console.log('[App] No remote hotel config, loading presets (skipSync)...');
+            Hotels.loadPresets(true); /* skipSync=true, _updatedAt=0 */
+          }
+        } catch (e) {
+          console.error('[App] initHotelConfig remote apply error:', e);
+        }
+      });
     } catch (e) {
       console.error('[App] initHotelConfig error:', e);
-      /* Last resort: try loading presets directly */
+      /* Last resort: presets as placeholder only (never pushed to cloud) */
       try {
         Hotels.loadPresets(true); /* skipSync=true */
         console.log('[App] Hotel presets loaded after error recovery');
@@ -5862,6 +5880,13 @@ function syncHCToFirebase(config, callback) {
     if (callback) callback(null);
     return;
   }
+  /* Safety 2: never upload a preset fallback that was never confirmed by cloud.
+     (_updatedAt === 0 means it came from loadPresets(true) before Firebase replied) */
+  if (!config._updatedAt) {
+    console.warn('[Firebase] syncHCToFirebase: preset fallback (no _updatedAt), skipping upload');
+    if (callback) callback(null);
+    return;
+  }
   if (!_db) {
     enqueueUpload({ type: 'hotelConfig', action: 'set', data: config });
     if (callback) callback({ error: 'not_ready' });
@@ -6061,6 +6086,38 @@ function clearFirebaseData(callback) {
   } catch (e) {
     console.error('[Firebase] clearFirebaseData exception:', e);
     if (callback) callback(e);
+  }
+}
+
+/* ===== One-shot read: Hotel Config (safe bootstrap before presets) ===== */
+
+function readHCOnce(callback) {
+  if (!_db) { if (callback) callback(null); return; }
+  var settled = false;
+  var timer = setTimeout(function () {
+    if (settled) return;
+    settled = true;
+    console.warn('[Firebase] readHCOnce timeout');
+    if (callback) callback(null);
+  }, 5000);
+
+  function finish(data) {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    if (callback) callback(data);
+  }
+
+  try {
+    _db.ref(FB_PATH.HOTEL_CONFIG).once('value', function (snap) {
+      finish(snap ? (snap.val() || null) : null);
+    }, function (err) {
+      console.error('[Firebase] readHCOnce error:', err);
+      finish(null);
+    });
+  } catch (e) {
+    console.error('[Firebase] readHCOnce exception:', e);
+    finish(null);
   }
 }
 
@@ -6918,7 +6975,11 @@ var Hotels = {
   loadPresets: function (skipSync) {
     var config = {
       version: PRESET_VERSION,
-      _updatedAt: Date.now(),
+      /* CRITICAL: preset fallback must NEVER claim to be newer than cloud data.
+         If skipSync=true this is only a local placeholder until Firebase replies;
+         stamping Date.now() here used to beat the real cloud config in the merger
+         and silently reverted users' custom hotels. */
+      _updatedAt: skipSync ? 0 : Date.now(),
       casinos: JSON.parse(JSON.stringify(PRESET_CASINOS))
     };
     State.set('hotelConfig', config);
@@ -13616,7 +13677,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1786340435662";
+window.BUILD_VERSION = "1792303166281";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
