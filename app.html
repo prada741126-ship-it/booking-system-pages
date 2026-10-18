@@ -5174,26 +5174,44 @@ var App = (function () {
   function initHotelConfig() {
     try {
       var hc = State.get('hotelConfig');
-      var hasRealConfig = hc && hc.casinos && hc.casinos.length > 0 && hc._updatedAt > 0;
-      if (hasRealConfig) {
-        console.log('[App] Hotel config loaded: ' + hc.casinos.length + ' casinos');
-        return;
+      var hasLocal = hc && hc.casinos && hc.casinos.length > 0;
+
+      if (!hasLocal) {
+        /* Placeholder only: ts=0 + _preset marker — never uploaded, never wins */
+        console.log('[App] Hotel config missing, using preset placeholder...');
+        Hotels.loadPresets(true);
+      } else {
+        console.log('[App] Hotel config local: ' + hc.casinos.length +
+          ' casinos (ts=' + (hc._updatedAt || 0) + (hc._preset ? ', preset' : '') + ')');
       }
 
-      /* Local is empty or only a preset placeholder (ts=0):
-         ask Firebase first. Presets are the last resort and never overwrite cloud. */
-      console.log('[App] Hotel config missing/placeholder, reading from Firebase...');
+      /* ALWAYS consult cloud. Local cache can be stale or preset-poisoned
+         (an older build stamped presets with Date.now()), so "local exists"
+         is NOT proof that local is authoritative. */
       readHCOnce(function (remote) {
         try {
-          if (remote && remote.casinos && remote.casinos.length > 0) {
-            State.set('hotelConfig', remote);
-            Store.saveHotelConfig(remote);
-            Events.emit(EVENTS.HC_LOADED, remote);
-            console.log('[App] Hotel config loaded from Firebase: ' + remote.casinos.length + ' casinos');
-          } else {
-            console.log('[App] No remote hotel config, loading presets (skipSync)...');
-            Hotels.loadPresets(true); /* skipSync=true, _updatedAt=0 */
+          if (!remote || !remote.casinos || remote.casinos.length === 0) {
+            console.log('[App] No usable cloud hotel config, keeping local');
+            return;
           }
+          var local = State.get('hotelConfig');
+          var merged = Merger.mergeHotelConfig(local, remote);
+          if (!merged || merged === local) {
+            console.log('[App] Hotel config: local is authoritative');
+            /* Local edits that never reached the cloud would otherwise stay
+               trapped on this device. Push them up once on boot. */
+            if (local && !local._preset && (local._updatedAt || 0) > (remote._updatedAt || 0)) {
+              console.log('[App] Local hotel config is newer, uploading to cloud');
+              try { syncHCToFirebase(local); } catch (e2) {
+                console.error('[App] HC upload on boot failed:', e2);
+              }
+            }
+            return;
+          }
+          State.set('hotelConfig', merged);
+          Store.saveHotelConfig(merged);
+          Events.emit(EVENTS.HC_LOADED, merged);
+          console.log('[App] Hotel config applied from cloud: ' + merged.casinos.length + ' casinos');
         } catch (e) {
           console.error('[App] initHotelConfig remote apply error:', e);
         }
@@ -5607,6 +5625,25 @@ var Merger = {
     var lTs = (local._updatedAt || 0);
     var rTs = (remote._updatedAt || 0);
 
+    /* Preset fallback must never beat real user data — even when an older build
+       stamped it with Date.now() and it carries a "newer" timestamp.
+       This heals devices whose local cache was poisoned with factory defaults. */
+    var sig = (typeof _cfgSignature === 'function') ? _cfgSignature : null;
+    var presetSig = (typeof PRESET_SIG !== 'undefined') ? PRESET_SIG : null;
+    var localIsPreset = local._preset === true ||
+      (!!sig && !!presetSig && sig(local.casinos) === presetSig);
+    var remoteIsPreset = remote._preset === true ||
+      (!!sig && !!presetSig && sig(remote.casinos) === presetSig);
+
+    if (localIsPreset && !remoteIsPreset) {
+      console.warn('[Merger] Local HC is factory preset, cloud data wins');
+      return remote;
+    }
+    if (remoteIsPreset && !localIsPreset) {
+      console.warn('[Merger] Remote HC is factory preset, local user data wins');
+      return local;
+    }
+
     if (rTs > lTs) {
       return remote;
     }
@@ -5882,8 +5919,8 @@ function syncHCToFirebase(config, callback) {
   }
   /* Safety 2: never upload a preset fallback that was never confirmed by cloud.
      (_updatedAt === 0 means it came from loadPresets(true) before Firebase replied) */
-  if (!config._updatedAt) {
-    console.warn('[Firebase] syncHCToFirebase: preset fallback (no _updatedAt), skipping upload');
+  if (!config._updatedAt || config._preset === true) {
+    console.warn('[Firebase] syncHCToFirebase: preset fallback (not user data), skipping upload');
     if (callback) callback(null);
     return;
   }
@@ -6964,6 +7001,44 @@ var PRESET_CASINOS = [
   }
 ];
 
+/* ===== Preset fingerprint =====
+   Used to recognise a config that is still 100% factory defaults, even when it
+   was written by an older build that stamped it with Date.now(). Such a config
+   must NEVER beat real cloud data, otherwise every device that ever reset to
+   presets keeps showing defaults and re-uploading them forever. */
+function _cfgSignature(casinos) {
+  var list = casinos || [];
+  var parts = [];
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i] || {};
+    var hs = c.hotels || [];
+    var hParts = [];
+    for (var j = 0; j < hs.length; j++) {
+      var h = hs[j] || {};
+      var rc = h.roomConfig || {};
+      var keys = Object.keys(rc).sort();
+      var rParts = [];
+      for (var k = 0; k < keys.length; k++) {
+        var r = rc[keys[k]] || {};
+        rParts.push(keys[k] + ':' + (Number(r.threshold) || 0) + ':' + (Number(r.defaultPrice) || 0));
+      }
+      hParts.push((h.name || '') + '[' + rParts.join(',') + ']');
+    }
+    parts.push((c.name || '') + '{' + hParts.join('|') + '}');
+  }
+  return parts.join(';');
+}
+
+var PRESET_SIG = _cfgSignature(PRESET_CASINOS);
+
+/* Mark a config as genuinely user-modified:
+   real timestamp + drop the "factory preset" marker so it may sync again. */
+function _touch(hc) {
+  hc._updatedAt = Date.now();
+  if (hc._preset) delete hc._preset;
+  return hc;
+}
+
 var Hotels = {
 
   /* ===== Load / Reset ===== */
@@ -6980,6 +7055,9 @@ var Hotels = {
          stamping Date.now() here used to beat the real cloud config in the merger
          and silently reverted users' custom hotels. */
       _updatedAt: skipSync ? 0 : Date.now(),
+      /* Explicit marker: this object is a factory fallback, not user data.
+         Cleared automatically on the first real edit (see _touch). */
+      _preset: skipSync ? true : false,
       casinos: JSON.parse(JSON.stringify(PRESET_CASINOS))
     };
     State.set('hotelConfig', config);
@@ -7020,7 +7098,7 @@ var Hotels = {
 
     var casino = { name: name, hotels: [] };
     hc.casinos.push(casino);
-    hc._updatedAt = Date.now();
+    _touch(hc);
 
     State.set('hotelConfig', hc);
     Store.saveHotelConfig(hc);
@@ -7041,7 +7119,7 @@ var Hotels = {
     });
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -7066,7 +7144,7 @@ var Hotels = {
     }
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -7096,7 +7174,7 @@ var Hotels = {
           roomConfig: _defaultRoomConfig()
         };
         hc.casinos[i].hotels.push(hotel);
-        hc._updatedAt = Date.now();
+        _touch(hc);
 
         State.set('hotelConfig', hc);
         Store.saveHotelConfig(hc);
@@ -7126,7 +7204,7 @@ var Hotels = {
     }
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -7156,7 +7234,7 @@ var Hotels = {
     }
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -7198,7 +7276,7 @@ var Hotels = {
     }
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -7232,7 +7310,7 @@ var Hotels = {
     }
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -7267,7 +7345,7 @@ var Hotels = {
     }
 
     if (found) {
-      hc._updatedAt = Date.now();
+      _touch(hc);
       State.set('hotelConfig', hc);
       Store.saveHotelConfig(hc);
       syncHCToFirebase(hc);
@@ -13677,7 +13755,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1792303166281";
+window.BUILD_VERSION = "1792303500955";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
