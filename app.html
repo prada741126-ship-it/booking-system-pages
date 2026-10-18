@@ -5192,6 +5192,8 @@ var App = (function () {
         try {
           if (!remote || !remote.casinos || remote.casinos.length === 0) {
             console.log('[App] No usable cloud hotel config, keeping local');
+            State.set('hcCloudChecked', true);
+            Events.emit(EVENTS.UI_RENDER, { page: 'hotel-config' });
             return;
           }
           var local = State.get('hotelConfig');
@@ -5210,6 +5212,7 @@ var App = (function () {
           }
           State.set('hotelConfig', merged);
           Store.saveHotelConfig(merged);
+          State.set('hcCloudChecked', true);
           Events.emit(EVENTS.HC_LOADED, merged);
           console.log('[App] Hotel config applied from cloud: ' + merged.casinos.length + ' casinos');
         } catch (e) {
@@ -5266,6 +5269,15 @@ var App = (function () {
 
     Events.on(EVENTS.BOOKINGS_SYNCED, function () {
       Events.emit(EVENTS.UI_RENDER, { page: Router.getCurrentPage() });
+    });
+
+    /* Hotel config arrives asynchronously (cloud read / watcher).
+       Without this the hotel page kept showing the preset placeholder that was
+       rendered before Firebase replied — looking exactly like "my settings were reset". */
+    Events.on(EVENTS.HC_LOADED, function () {
+      if (Router.getCurrentPage() === 'hotel-config') {
+        Events.emit(EVENTS.UI_RENDER, { page: 'hotel-config' });
+      }
     });
 
     /* Sync status updates */
@@ -12598,6 +12610,17 @@ var HotelConfigPage = (function () {
     try {
       var hc = Hotels.getAll();
 
+      /* Cloud read still in flight and we only hold a factory placeholder.
+         Show a neutral loading state instead of dumping default values on screen
+         (defaults on screen = user thinks settings were wiped and re-enters them). */
+      if (hc && hc._preset === true && !State.get('hcCloudChecked')) {
+        container.innerHTML = '<div class="empty-state" style="padding:var(--sp-12) var(--sp-4);">' +
+          '<div class="empty-title" style="font-size:var(--fs-lg);margin-bottom:var(--sp-2);">正在讀取雲端酒店設定…</div>' +
+          '<div class="empty-desc">請稍候，正在與雲端同步，避免顯示舊資料。</div>' +
+          '</div>';
+        return;
+      }
+
       /* Auto-load presets if config is empty (skipSync=true — never push
          default presets to Firebase, which would overwrite custom thresholds
          set on other devices) */
@@ -13755,7 +13778,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1792303500955";
+window.BUILD_VERSION = "1792303553022";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
