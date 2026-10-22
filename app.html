@@ -6141,14 +6141,13 @@ function clearFirebaseData(callback) {
 /* ===== One-shot read: Hotel Config (safe bootstrap before presets) ===== */
 
 function readHCOnce(callback) {
-  if (!_db) { if (callback) callback(null); return; }
   var settled = false;
   var timer = setTimeout(function () {
     if (settled) return;
     settled = true;
     console.warn('[Firebase] readHCOnce timeout');
     if (callback) callback(null);
-  }, 5000);
+  }, 15000);
 
   function finish(data) {
     if (settled) return;
@@ -6157,17 +6156,30 @@ function readHCOnce(callback) {
     if (callback) callback(data);
   }
 
-  try {
-    _db.ref(FB_PATH.HOTEL_CONFIG).once('value', function (snap) {
-      finish(snap ? (snap.val() || null) : null);
-    }, function (err) {
-      console.error('[Firebase] readHCOnce error:', err);
+  /* Firebase may not be authorised yet when this runs (init order).
+     Returning null immediately used to make the UI treat factory presets as
+     the real config — wait for the DB handle instead. */
+  var attempts = 0;
+  function tryRead() {
+    if (settled) return;
+    if (!_db) {
+      if (++attempts > 30) { finish(null); return; } /* ~15s */
+      setTimeout(tryRead, 500);
+      return;
+    }
+    try {
+      _db.ref(FB_PATH.HOTEL_CONFIG).once('value', function (snap) {
+        finish(snap ? (snap.val() || null) : null);
+      }, function (err) {
+        console.error('[Firebase] readHCOnce error:', err);
+        finish(null);
+      });
+    } catch (e) {
+      console.error('[Firebase] readHCOnce exception:', e);
       finish(null);
-    });
-  } catch (e) {
-    console.error('[Firebase] readHCOnce exception:', e);
-    finish(null);
+    }
   }
+  tryRead();
 }
 
 /* ===== Status ===== */
@@ -12648,9 +12660,16 @@ var HotelConfigPage = (function () {
 
       var html = '';
 
+      /* If what we're showing is still the factory placeholder (cloud never
+         delivered real data), make that unmistakable so the user does not
+         mistake defaults for "my settings were wiped" — and does not edit it. */
+      if (hc && hc._preset === true) {
+        html += '<div style="background:var(--color-warning-bg, #fef3c7);color:#92400e;border:1px solid #f59e0b;border-radius:var(--radius-md, 8px);padding:var(--sp-3) var(--sp-4);margin-bottom:var(--sp-4);font-size:var(--fs-sm);">' +
+          '⚠ 目前顯示的是<b>暫存預設資料</b>（尚未從雲端取得你的設定，可能是網路未連上）。請勿在此狀態下編輯，重新整理後會自動載入雲端設定。</div>';
+      }
+
       /* Page header */
-      html += '<div class="page-header">';
-      html += '  <h3>酒店設定 <span style="font-size:var(--fs-sm);color:var(--text-muted);font-weight:400;">v' + Utils.escapeHtml(hc.version || '?') + '</span></h3>';
+      html += '<div class="page-header">';      html += '  <h3>酒店設定 <span style="font-size:var(--fs-sm);color:var(--text-muted);font-weight:400;">v' + Utils.escapeHtml(hc.version || '?') + '</span></h3>';
       html += '  <div class="page-actions">';
       html += '    <button class="btn btn-secondary" onclick="HotelConfigPage.showAddCasino()">';
       html += '      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
@@ -13778,7 +13797,7 @@ function unsealMonthAction(monthStr) {
 
 <!-- ===== App Init ===== -->
 <script>
-window.BUILD_VERSION = "1792303553022";
+window.BUILD_VERSION = "1792693256188";
 document.addEventListener("DOMContentLoaded", function() {
   if (typeof Auth !== "undefined" && Auth.isLoggedIn()) {
     var overlay = document.getElementById("login-overlay");
